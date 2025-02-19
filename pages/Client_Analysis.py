@@ -4,41 +4,26 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
 import calendar
+import sys
+import os
+
+# Import functions from Home.py
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from Home import load_data, apply_filters, create_sidebar_filters
 
 # Page config
 st.set_page_config(page_title="Client Analysis - Scale LLP Dashboard", layout="wide")
 
-# Load data function
-def load_data():
-    df = pd.read_csv("Test_Full_Year.csv")
-    
-    numeric_columns = [
-        'Activity Year', 'Activity month', 'Activity quarter',
-        'Non-billable hours', 'Non-billable hours value',
-        'Billed & Unbilled hours', 'Billed & Unbilled hours value',
-        'Unbilled hours', 'Unbilled hours value',
-        'Billed hours', 'Billed hours value',
-        'Utilization rate', 'Tracked hours',
-        'User rate'
-    ]
-    
-    for col in numeric_columns:
-        if col in df.columns:
-            df[col] = df[col].replace('', pd.NA)
-            df[col] = pd.to_numeric(df[col], errors='coerce')
-    
-    df['Activity Year'] = df['Activity Year'].astype(str).str.replace(',', '').astype(float)
-    return df
-
-# Load and filter data
+# Load data and create filters
 df = load_data()
-filtered_df = df  # Apply your filtering logic here
+create_sidebar_filters()
+filtered_df = apply_filters(df)
 
 # Page Header
 st.title("Client Analysis")
 st.markdown(f"*Last refreshed: Wednesday Feb 19, 2025*")
 
-# Top Client Overview Metrics
+# Key Client Metrics
 st.markdown("### Key Client Metrics")
 col1, col2, col3, col4 = st.columns(4)
 
@@ -150,8 +135,8 @@ client_trends = filtered_df[filtered_df['Company name'].isin(top_5_clients)].gro
 }).reset_index()
 
 client_trends['Date'] = pd.to_datetime(
-    client_trends['Activity Year'].astype(str) + '-' + 
-    client_trends['Activity month'].astype(str) + '-01'
+    client_trends['Activity Year'].astype(int).astype(str) + '-' + 
+    client_trends['Activity month'].astype(int).astype(str).str.zfill(2) + '-01'
 )
 
 fig_trends = px.line(
@@ -248,7 +233,7 @@ st.download_button(
     key='download-client-metrics'
 )
 
-# Custom CSS for styling
+# Add styling
 st.markdown("""
 <style>
     .metric-card {
