@@ -66,28 +66,42 @@ date_filter_type = st.sidebar.radio(
     ["Year-Month", "Custom Date Range"]
 )
 
-# Initialize date filters based on available data
-min_date = df['Activity date'].min()
-max_date = df['Activity date'].max()
-
 if date_filter_type == "Year-Month":
-    years = sorted(df['Activity date'].dt.year.unique())
-    selected_years = st.sidebar.multiselect(
-        'Select Years',
-        options=years,
-        default=years[-1:]
+    # Get unique months and quarters
+    unique_months = sorted(df['Activity month'].unique())
+    unique_quarters = sorted(df['Activity quarter'].unique())
+    
+    # Year-Month filters
+    filter_level = st.sidebar.radio(
+        "Filter by",
+        ["Month", "Quarter"]
     )
     
-    months = range(1, 13)
-    selected_months = st.sidebar.multiselect(
-        'Select Months',
-        options=months,
-        default=list(months),
-        format_func=lambda x: calendar.month_name[x]
-    )
+    if filter_level == "Month":
+        selected_months = st.sidebar.multiselect(
+            'Select Months',
+            options=unique_months,
+            default=[unique_months[0]]
+        )
+    else:
+        selected_quarters = st.sidebar.multiselect(
+            'Select Quarters',
+            options=unique_quarters,
+            default=[unique_quarters[0]]
+        )
 else:
-    start_date = st.sidebar.date_input('Start Date', min_date, min_value=min_date, max_value=max_date)
-    end_date = st.sidebar.date_input('End Date', max_date, min_value=min_date, max_value=max_date)
+    # Custom date range
+    min_date = pd.to_datetime(df['Activity date'].min())
+    max_date = pd.to_datetime(df['Activity date'].max())
+    
+    start_date = st.sidebar.date_input('Start Date', 
+                                      min_date,
+                                      min_value=min_date,
+                                      max_value=max_date)
+    end_date = st.sidebar.date_input('End Date', 
+                                    max_date,
+                                    min_value=min_date,
+                                    max_value=max_date)
 
 # Other filters
 st.sidebar.subheader('Other Filters')
@@ -127,8 +141,33 @@ def filter_data(df):
     
     # Apply date filters
     if date_filter_type == "Year-Month":
-        if selected_years:
-            filtered_df = filtered_df[filtered_df['Activity date'].dt.year.isin(selected_years)]
+        if filter_level == "Month" and selected_months:
+            filtered_df = filtered_df[filtered_df['Activity month'].isin(selected_months)]
+        elif filter_level == "Quarter" and selected_quarters:
+            filtered_df = filtered_df[filtered_df['Activity quarter'].isin(selected_quarters)]
+    else:
+        # Convert dates to datetime for comparison
+        filtered_df['Activity date'] = pd.to_datetime(filtered_df['Activity date'])
+        filtered_df = filtered_df[
+            (filtered_df['Activity date'].dt.date >= start_date) &
+            (filtered_df['Activity date'].dt.date <= end_date)
+        ]
+    
+    # Apply other filters
+    if selected_attorney:
+        filtered_df = filtered_df[filtered_df['User full name (first, last)'].isin(selected_attorney)]
+    if selected_practice:
+        filtered_df = filtered_df[filtered_df['Practice area'].isin(selected_practice)]
+    if selected_location:
+        filtered_df = filtered_df[filtered_df['Matter location'].isin(selected_location)]
+    if selected_status:
+        filtered_df = filtered_df[filtered_df['Matter status'].isin(selected_status)]
+    if selected_billing:
+        filtered_df = filtered_df[filtered_df['Matter billing method'].isin(selected_billing)]
+    if selected_client:
+        filtered_df = filtered_df[filtered_df['Company name'].isin(selected_client)]
+    
+    return filtered_df = filtered_df[filtered_df['Activity date'].dt.year.isin(selected_years)]
         if selected_months:
             filtered_df = filtered_df[filtered_df['Activity date'].dt.month.isin(selected_months)]
     else:
