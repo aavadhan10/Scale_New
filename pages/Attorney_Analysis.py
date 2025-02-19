@@ -14,43 +14,10 @@ from Home import load_data, apply_filters, create_sidebar_filters
 # Page config
 st.set_page_config(page_title="Attorney Analysis - Scale LLP Dashboard", layout="wide")
 
-# Load data
-@st.cache_data
-def load_data():
-    df = pd.read_csv("Test_Full_Year.csv")
-    
-    # Convert Activity date to datetime
-    df['Activity date'] = pd.to_datetime(df['Activity date'])
-    
-    return df
-
-# Load data
+# Load data and create filters
 df = load_data()
-
-# Create date filter in sidebar
-st.sidebar.subheader('Date Range Filter')
-min_date = df['Activity date'].min()
-max_date = df['Activity date'].max()
-
-start_date = st.sidebar.date_input(
-    "Start Date",
-    min_date,
-    min_value=min_date,
-    max_value=max_date
-)
-
-end_date = st.sidebar.date_input(
-    "End Date",
-    max_date,
-    min_value=min_date,
-    max_value=max_date
-)
-
-# Filter the dataframe based on dates
-filtered_df = df[
-    (df['Activity date'].dt.date >= start_date) &
-    (df['Activity date'].dt.date <= end_date)
-]
+create_sidebar_filters()
+filtered_df = apply_filters(df)
 
 # Page Header
 st.title("Attorney Analysis")
