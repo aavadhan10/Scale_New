@@ -388,4 +388,75 @@ st.dataframe(
 csv = attorney_detail_metrics.to_csv(index=False).encode('utf-8')
 st.download_button(
     "Export Attorney Metrics to CSV",
-    
+    csv,
+    "attorney_metrics.csv",
+    "text/csv",
+    key='download-attorney-metrics'
+)
+
+# Add export functionality for raw data
+st.sidebar.markdown("---")
+if st.sidebar.button("Export Raw Data"):
+    csv = filtered_df.to_csv(index=False).encode('utf-8')
+    st.sidebar.download_button(
+        "Download CSV",
+        csv,
+        "scale_llp_data.csv",
+        "text/csv",
+        key='download-csv'
+    )
+
+# Custom CSS for styling
+st.markdown("""
+<style>
+    .metric-card {
+        background-color: #f8f9fa;
+        border-radius: 10px;
+        padding: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .metric-value {
+        font-size: 24px;
+        font-weight: bold;
+        color: #1f77b4;
+    }
+    .metric-delta {
+        font-size: 14px;
+    }
+    .metric-delta.positive {
+        color: #28a745;
+    }
+    .metric-delta.negative {
+        color: #dc3545;
+    }
+    .plot-container {
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        border-radius: 10px;
+        padding: 15px;
+        background-color: white;
+    }
+    .dataframe {
+        font-size: 12px;
+    }
+    .stApp {
+        background-color: #ffffff;
+    }
+    .main .block-container {
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+    }
+    h1 {
+        color: #2c3e50;
+    }
+    .stSidebar .sidebar-content {
+        background-color: #f8f9fa;
+    }
+    .css-1d391kg {
+        padding-top: 3rem;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Display last refresh time in sidebar
+st.sidebar.markdown("---")
+st.sidebar.markdown("*Last data refresh:*  \nWednesday Feb 19, 2025")
