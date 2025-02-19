@@ -4,15 +4,35 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
 import calendar
-from home import load_data, create_sidebar_filters, apply_filters  # Import from home.py
 
 # Page config
 st.set_page_config(page_title="Attorney Analysis - Scale LLP Dashboard", layout="wide")
 
-# Load data and apply filters
+# Load data function
+def load_data():
+    df = pd.read_csv("Test_Full_Year.csv")
+    
+    numeric_columns = [
+        'Activity Year', 'Activity month', 'Activity quarter',
+        'Non-billable hours', 'Non-billable hours value',
+        'Billed & Unbilled hours', 'Billed & Unbilled hours value',
+        'Unbilled hours', 'Unbilled hours value',
+        'Billed hours', 'Billed hours value',
+        'Utilization rate', 'Tracked hours',
+        'User rate'
+    ]
+    
+    for col in numeric_columns:
+        if col in df.columns:
+            df[col] = df[col].replace('', pd.NA)
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+    
+    df['Activity Year'] = df['Activity Year'].astype(str).str.replace(',', '').astype(float)
+    return df
+
+# Load and filter data
 df = load_data()
-create_sidebar_filters()
-filtered_df = apply_filters(df)
+filtered_df = df  # Apply your filtering logic here
 
 # Page Header
 st.title("Attorney Analysis")
@@ -174,13 +194,18 @@ top_5_attorneys = filtered_df.groupby('User full name (first, last)')['Billed ho
 
 attorney_trends = filtered_df[
     filtered_df['User full name (first, last)'].isin(top_5_attorneys)
-].groupby(['Activity date', 'User full name (first, last)']).agg({
+].groupby(['Activity Year', 'Activity month', 'User full name (first, last)']).agg({
     'Utilization rate': 'mean'
 }).reset_index()
 
+attorney_trends['Date'] = pd.to_datetime(
+    attorney_trends['Activity Year'].astype(str) + '-' + 
+    attorney_trends['Activity month'].astype(str) + '-01'
+)
+
 fig_trends = px.line(
     attorney_trends,
-    x='Activity date',
+    x='Date',
     y='Utilization rate',
     color='User full name (first, last)',
     title='Utilization Rate Trends - Top 5 Attorneys',
@@ -238,18 +263,6 @@ st.download_button(
     key='download-attorney-metrics'
 )
 
-# Add export functionality for raw data
-st.sidebar.markdown("---")
-if st.sidebar.button("Export Raw Data"):
-    csv = filtered_df.to_csv(index=False).encode('utf-8')
-    st.sidebar.download_button(
-        "Download CSV",
-        csv,
-        "scale_llp_data.csv",
-        "text/csv",
-        key='download-csv'
-    )
-
 # Custom CSS for styling
 st.markdown("""
 <style>
@@ -282,25 +295,5 @@ st.markdown("""
     .dataframe {
         font-size: 12px;
     }
-    .stApp {
-        background-color: #ffffff;
-    }
-    .main .block-container {
-        padding-top: 2rem;
-        padding-bottom: 2rem;
-    }
-    h1 {
-        color: #2c3e50;
-    }
-    .stSidebar .sidebar-content {
-        background-color: #f8f9fa;
-    }
-    .css-1d391kg {
-        padding-top: 3rem;
-    }
 </style>
 """, unsafe_allow_html=True)
-
-# Display last refresh time in sidebar
-st.sidebar.markdown("---")
-st.sidebar.markdown("*Last data refresh:*  \nWednesday Feb 19, 2025")
