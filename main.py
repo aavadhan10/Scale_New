@@ -15,11 +15,8 @@ def load_data():
         # Read the CSV file
         df = pd.read_csv("Test_Full_Year.csv")
         
-        # Clean column names (remove ** from column names)
-        df.columns = df.columns.str.replace('*', '').str.strip()
-        
-        # Convert Activity date to datetime using mixed format
-        df['Activity date'] = pd.to_datetime(df['Activity date'], format='mixed')
+        # Clean column names (remove quotes and spaces)
+        df.columns = df.columns.str.replace('"', '').str.strip()
         
         # Convert numeric columns
         numeric_columns = [
@@ -31,18 +28,125 @@ def load_data():
             'Unbilled hours',
             'Non-billable hours',
             'Billed hours value',
-            'Utilization rate'
+            'Utilization rate',
+            'User yearly working days',
+            'User rate'
         ]
         
         for col in numeric_columns:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         
+        # Create a period column for trending analysis
+        df['Period'] = df['Activity month'].astype(str).str.zfill(2) + '-' + '2024'
+        
         return df
     except Exception as e:
         st.error(f"Error loading data: {str(e)}")
-        st.write("Columns in the dataframe:", df.columns.tolist())  # Debug info
         return pd.DataFrame()
+
+# Load data
+df = load_data()
+
+# Sidebar filters
+st.sidebar.header('Filters')
+
+# Time filters
+st.sidebar.subheader('Time Filters')
+date_filter_type = st.sidebar.radio(
+    "Select Date Filter Type",
+    ["Month/Quarter", "Custom Range"]
+)
+
+if date_filter_type == "Month/Quarter":
+    filter_level = st.sidebar.radio(
+        "Filter by",
+        ["Month", "Quarter"]
+    )
+    
+    if filter_level == "Month":
+        months = sorted(df['Activity month'].unique())
+        selected_months = st.sidebar.multiselect(
+            'Select Months',
+            options=months,
+            default=[months[0]] if len(months) > 0 else [],
+            format_func=lambda x: calendar.month_name[int(x)]
+        )
+    else:
+        quarters = sorted(df['Activity quarter'].unique())
+        selected_quarters = st.sidebar.multiselect(
+            'Select Quarters',
+            options=quarters,
+            default=[quarters[0]] if len(quarters) > 0 else [],
+            format_func=lambda x: f'Q{int(x)}'
+        )
+else:
+    # Use month range instead of dates
+    months = sorted(df['Activity month'].unique())
+    start_month = st.sidebar.selectbox('Start Month', options=months, 
+                                     format_func=lambda x: calendar.month_name[int(x)])
+    end_month = st.sidebar.selectbox('End Month', options=months,
+                                   format_func=lambda x: calendar.month_name[int(x)],
+                                   index=len(months)-1)
+
+# Other filters
+def get_unique_values(df, column):
+    return sorted(df[column].dropna().unique())
+
+selected_attorney = st.sidebar.multiselect(
+    'Attorneys',
+    options=get_unique_values(df, 'User full name (first, last)')
+)
+
+selected_practice = st.sidebar.multiselect(
+    'Practice Areas',
+    options=get_unique_values(df, 'Practice area')
+)
+
+selected_location = st.sidebar.multiselect(
+    'Matter Locations',
+    options=get_unique_values(df, 'Matter location')
+)
+
+selected_status = st.sidebar.multiselect(
+    'Matter Status',
+    options=get_unique_values(df, 'Matter status')
+)
+
+selected_client = st.sidebar.multiselect(
+    'Clients',
+    options=get_unique_values(df, 'Company name')
+)
+
+def filter_data(df):
+    filtered_df = df.copy()
+    
+    # Time filtering
+    if date_filter_type == "Month/Quarter":
+        if filter_level == "Month" and selected_months:
+            filtered_df = filtered_df[filtered_df['Activity month'].isin(selected_months)]
+        elif filter_level == "Quarter" and selected_quarters:
+            filtered_df = filtered_df[filtered_df['Activity quarter'].isin(selected_quarters)]
+    else:
+        # Month range filtering
+        filtered_df = filtered_df[
+            (filtered_df['Activity month'] >= start_month) & 
+            (filtered_df['Activity month'] <= end_month)
+        ]
+    
+    # Other filters
+    if selected_attorney:
+        filtered_df = filtered_df[filtered_df['User full name (first, last)'].isin(selected_attorney)]
+    if selected_practice:
+        filtered_df = filtered_df[filtered_df['Practice area'].isin(selected_practice)]
+    if selected_location:
+        filtered_df = filtered_df[filtered_df['Matter location'].isin(selected_location)]
+    if selected_status:
+        filtered_df = filtered_df[filtered_df['Matter status'].isin(selected_status)]
+    if selected_client:
+        filtered_df = filtered_df[filtered_df['Company name'].isin(selected_client)]
+    
+    return filtered_df
 
 # Load data
 df = load_data()
@@ -351,20 +455,18 @@ with tab5:
     st.header('Trending Analysis')
     
     # Time series analysis
-    time_metrics = filtered_df.groupby(filtered_df['Activity date'].dt.to_period('M')).agg({
+    time_metrics = filtered_df.groupby('Period').agg({
         'Billed hours': 'sum',
         'Billed hours value': 'sum',
         'Utilization rate': 'mean'
     }).reset_index()
     
-    time_metrics['Activity date'] = time_metrics['Activity date'].astype(str)
-    
     # Multiple metrics over time
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=time_metrics['Activity date'], 
+    fig.add_trace(go.Scatter(x=time_metrics['Period'], 
                             y=time_metrics['Billed hours'],
                             name='Billed Hours'))
-    fig.add_trace(go.Scatter(x=time_metrics['Activity date'], 
+    fig.add_trace(go.Scatter(x=time_metrics['Period'], 
                             y=time_metrics['Utilization rate'],
                             name='Utilization Rate', 
                             yaxis='y2'))
@@ -380,7 +482,7 @@ with tab5:
     
     # Trending tables
     st.subheader('Monthly Metrics')
-    monthly_metrics = time_metrics[['Activity date', 'Billed hours', 'Billed hours value', 'Utilization rate']].round(2)
+    monthly_metrics = time_metrics[['Period', 'Billed hours', 'Billed hours value', 'Utilization rate']].round(2)
     monthly_metrics.columns = ['Month', 'Billed Hours', 'Revenue', 'Utilization Rate']
     st.dataframe(monthly_metrics)
 
