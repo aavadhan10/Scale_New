@@ -13,19 +13,6 @@ st.set_page_config(page_title="Law Firm Analytics Dashboard", layout="wide")
 def load_data():
     try:
         df = pd.read_csv("Test_Full_Year.csv")
-        df.columns = df.columns.str.replace('*', '').str.replace('"', '').str.strip()
-        
-        # Extract year from Activity date
-        df['Year'] = df['Activity date'].str.split('/').str[-1]
-        df['Year'] = pd.to_numeric(df['Year'], errors='coerce')
-        
-        # Convert numeric columns
-        numeric_cols = ['Activity month', 'Activity quarter', 'Activity day', 
-                       'Billed & Unbilled hours', 'Billed hours', 'Utilization rate',
-                       'Billed hours value', 'Non-billable hours']
-        for col in numeric_cols:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         return df
     except Exception as e:
         return pd.DataFrame()
@@ -33,52 +20,45 @@ def load_data():
 # Load data
 df = load_data()
 
+# Clean column names once
+df.columns = df.columns.str.replace('*', '').str.replace('"', '').str.strip()
+
 # Sidebar filters
 st.sidebar.header('Filters')
 
+# Initialize filter variables
+selected_years = []
+month_selection = []
+quarter_selection = []
+start_month = None
+end_month = None
+attorneys = []
+practices = []
+locations = []
+statuses = []
+clients = []
+
 # Year filter
-years = sorted(df['Year'].dropna().unique())
+years = sorted(df['Activity Year'].unique())
 selected_years = st.sidebar.multiselect(
     'Select Years',
     options=years,
-    default=[years[0]] if len(years) > 0 else []
+    default=[years[0]] if len(years) > 0 else [],
+    key="year_select"
 )
-
-# Load data
-df = load_data()
-
-# Sidebar filters
-st.sidebar.header('Filters')
-
-# Year filter first (with error handling)
-try:
-    available_years = sorted(df['Year'].dropna().unique().astype(int))
-    if available_years:
-        selected_years = st.sidebar.multiselect(
-            'Select Years',
-            options=available_years,
-            default=[available_years[0]] if available_years else [],
-            key="year_select_000"
-        )
-    else:
-        st.warning("No valid years found in the data")
-        selected_years = []
-except Exception as e:
-    st.error(f"Error setting up year filter: {str(e)}")
-    selected_years = []
 
 # Time filters
 filter_section = st.sidebar.radio(
     "Select Additional Time Filter",
     ["Month/Quarter", "Custom Range"],
-    key="filter_section_radio_123"
+    key="time_filter_type"
 )
 
 if filter_section == "Month/Quarter":
     level = st.sidebar.radio(
         "Filter by",
         ["Month", "Quarter"],
-        key="level_radio_456"
+        key="month_quarter_level"
     )
     
     if level == "Month":
@@ -88,7 +68,7 @@ if filter_section == "Month/Quarter":
             options=months,
             default=[months[0]] if len(months) > 0 else [],
             format_func=lambda x: calendar.month_name[int(x)],
-            key="month_select_789"
+            key="month_select"
         )
     else:
         quarters = sorted(df['Activity quarter'].unique())
@@ -97,7 +77,7 @@ if filter_section == "Month/Quarter":
             options=quarters,
             default=[quarters[0]] if len(quarters) > 0 else [],
             format_func=lambda x: f'Q{int(x)}',
-            key="quarter_select_101112"
+            key="quarter_select"
         )
 else:
     months = sorted(df['Activity month'].unique())
@@ -105,52 +85,51 @@ else:
         'Start Month', 
         options=months, 
         format_func=lambda x: calendar.month_name[int(x)],
-        key="start_month_131415"
+        key="start_month"
     )
     end_month = st.sidebar.selectbox(
         'End Month',
         options=months,
         format_func=lambda x: calendar.month_name[int(x)],
         index=len(months)-1,
-        key="end_month_161718"
+        key="end_month"
     )
 
 # Other filters
 attorneys = st.sidebar.multiselect(
     'Attorneys',
     options=sorted(df['User full name (first, last)'].dropna().unique()),
-    key="attorney_select_192021"
+    key="attorneys"
 )
 
 practices = st.sidebar.multiselect(
     'Practice Areas',
     options=sorted(df['Practice area'].dropna().unique()),
-    key="practice_select_222324"
+    key="practices"
 )
 
 locations = st.sidebar.multiselect(
     'Matter Locations',
     options=sorted(df['Matter location'].dropna().unique()),
-    key="location_select_252627"
+    key="locations"
 )
 
 statuses = st.sidebar.multiselect(
     'Matter Status',
     options=sorted(df['Matter status'].dropna().unique()),
-    key="status_select_282930"
+    key="statuses"
 )
 
 clients = st.sidebar.multiselect(
     'Clients',
     options=sorted(df['Company name'].dropna().unique()),
-    key="client_select_313233"
+    key="clients"
 )
 
-# Apply filters
 def filter_data(df):
     filtered = df.copy()
     
-    # Apply year filter first
+    # Apply year filter
     if selected_years:
         filtered = filtered[filtered['Activity Year'].isin(selected_years)]
     
@@ -161,10 +140,11 @@ def filter_data(df):
         elif level == "Quarter" and quarter_selection:
             filtered = filtered[filtered['Activity quarter'].isin(quarter_selection)]
     else:
-        filtered = filtered[
-            (filtered['Activity month'] >= start_month) & 
-            (filtered['Activity month'] <= end_month)
-        ]
+        if start_month is not None and end_month is not None:
+            filtered = filtered[
+                (filtered['Activity month'] >= start_month) & 
+                (filtered['Activity month'] <= end_month)
+            ]
     
     # Apply other filters
     if attorneys:
@@ -227,11 +207,10 @@ with tab1:
         st.plotly_chart(fig, use_container_width=True)
 
     with col2:
-        # Monthly trend using month and year
-        monthly_data = filtered_df.groupby(['Year', 'Activity month']).agg({
+        monthly_data = filtered_df.groupby(['Activity Year', 'Activity month']).agg({
             'Billed hours': 'sum'
         }).reset_index()
-        monthly_data['Period'] = monthly_data['Year'].astype(str) + '-' + monthly_data['Activity month'].astype(str).str.zfill(2)
+        monthly_data['Period'] = monthly_data['Activity Year'].astype(str) + '-' + monthly_data['Activity month'].astype(str).str.zfill(2)
         
         fig = px.line(monthly_data, x='Period', y='Billed hours',
                      title='Monthly Billed Hours Trend')
@@ -365,13 +344,13 @@ with tab5:
     st.header('Trending Analysis')
     
     # Time series analysis by year and month
-    time_metrics = filtered_df.groupby(['Year', 'Activity month']).agg({
+    time_metrics = filtered_df.groupby(['Activity Year', 'Activity month']).agg({
         'Billed hours': 'sum',
         'Billed hours value': 'sum',
         'Utilization rate': 'mean'
     }).reset_index()
     
-    time_metrics['Period'] = time_metrics['Year'].astype(str) + '-' + time_metrics['Activity month'].astype(str).str.zfill(2)
+    time_metrics['Period'] = time_metrics['Activity Year'].astype(str) + '-' + time_metrics['Activity month'].astype(str).str.zfill(2)
     
     # Multiple metrics over time
     fig = go.Figure()
