@@ -297,7 +297,6 @@ def main():
     filtered_df = apply_filters(df)
     
     # Main page content
-    st.title("Scale LLP Analytics Dashboard")
     st.markdown(f"*Last refreshed: Wednesday Feb 19, 2025*")
     
     # Add date range note
