@@ -13,6 +13,20 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Initialize session state for filters
+if 'filters' not in st.session_state:
+    st.session_state.filters = {
+        'start_date': None,
+        'end_date': None,
+        'quarters': [],
+        'attorney_levels': [],
+        'attorneys': [],
+        'practices': [],
+        'locations': [],
+        'statuses': [],
+        'clients': []
+    }
+
 # Load data function
 @st.cache_data
 def load_data():
@@ -149,24 +163,7 @@ def load_data():
     
     return df
 
-# Initialize session state for filters
-if 'filters' not in st.session_state:
-    st.session_state.filters = {
-        'date_range': [],
-        'quarters': [],
-        'attorney_levels': [],
-        'attorneys': [],
-        'practices': [],
-        'locations': [],
-        'statuses': [],
-        'clients': []
-    }
-
-# Load data
-df = load_data()
-
-# Create sidebar filters
-def create_sidebar_filters():
+def create_sidebar_filters(df):
     st.sidebar.header('Filters')
     
     # Time period filters
@@ -176,21 +173,30 @@ def create_sidebar_filters():
     min_date = df['Activity date'].min()
     max_date = df['Activity date'].max()
     
+    # Initialize default dates if not set
+    if st.session_state.filters['start_date'] is None:
+        st.session_state.filters['start_date'] = min_date
+    if st.session_state.filters['end_date'] is None:
+        st.session_state.filters['end_date'] = max_date
+    
+    # Date input widgets that update session state
     start_date = st.sidebar.date_input(
         "Start Date",
-        min_date,
+        value=st.session_state.filters['start_date'],
         min_value=min_date,
         max_value=max_date
     )
     
     end_date = st.sidebar.date_input(
         "End Date",
-        max_date,
+        value=st.session_state.filters['end_date'],
         min_value=min_date,
         max_value=max_date
     )
     
-    st.session_state.filters['date_range'] = [start_date, end_date]
+    # Update session state
+    st.session_state.filters['start_date'] = start_date
+    st.session_state.filters['end_date'] = end_date
     
     # Quarter filter
     quarters = sorted(df['Activity quarter'].dropna().unique().astype(int).tolist())
@@ -245,18 +251,17 @@ def create_sidebar_filters():
         options=clients
     )
 
-# Function to apply filters
 def apply_filters(df):
     filtered = df.copy()
     
-    # Apply date range filter
-    if st.session_state.filters['date_range']:
-        start_date, end_date = st.session_state.filters['date_range']
+    # Apply date range filter using session state
+    if st.session_state.filters['start_date'] and st.session_state.filters['end_date']:
         filtered = filtered[
-            (filtered['Activity date'].dt.date >= start_date) &
-            (filtered['Activity date'].dt.date <= end_date)
+            (filtered['Activity date'].dt.date >= st.session_state.filters['start_date']) &
+            (filtered['Activity date'].dt.date <= st.session_state.filters['end_date'])
         ]
     
+    # Apply other filters
     if st.session_state.filters['quarters']:
         selected_quarter_numbers = [int(q[1]) for q in st.session_state.filters['quarters']]
         filtered = filtered[filtered['Activity quarter'].isin(selected_quarter_numbers)]
@@ -281,176 +286,187 @@ def apply_filters(df):
     
     return filtered
 
-# Create sidebar filters
-create_sidebar_filters()
-
-# Apply filters to get filtered dataframe
-filtered_df = apply_filters(df)
-
-# Main page content
-st.title("Scale LLP Analytics Dashboard")
-st.markdown(f"*Last refreshed: Wednesday Feb 19, 2025*")
-
-# Welcome message
-st.write("""
-Welcome to the Scale LLP Analytics Dashboard. This dashboard provides comprehensive insights into the firm's performance metrics, 
-client relationships, attorney productivity, and practice area analysis. Refreshed Weekly on Friday at 12:00 AM PST 
-
-📊 **Available Pages:**
-- Overview: Key performance metrics and high-level insights
-- Client Analysis: Detailed client performance and relationship metrics
-- Attorney Analysis: Individual attorney performance and productivity metrics
-- Practice Areas: Practice-specific analysis and trends
-- Trending: Historical trends and performance patterns
-
-Use the filters in the sidebar to customize the view according to your needs.
-""")
-
-# Display key metrics on the home page
-col1, col2, col3, col4 = st.columns(4)
-
-with col1:
-    total_billable_hours = filtered_df['Billed & Unbilled hours'].sum()
-    prev_total = total_billable_hours * 0.95  # Example comparison
-    delta = ((total_billable_hours - prev_total) / prev_total) * 100
-    arrow = "↗️" if delta > 0 else "↘️"
-    st.metric(
-        "Total Billable Hours",
-        f"{total_billable_hours:,.1f}",
-        f"{arrow} {delta:.1f}%"
-    )
-
-with col2:
-    total_billed = filtered_df['Billed hours'].sum()
-    prev_billed = total_billed * 0.95
-    delta = ((total_billed - prev_billed) / prev_billed) * 100
-    arrow = "↗️" if delta > 0 else "↘️"
-    st.metric(
-        "Billed Hours",
-        f"{total_billed:,.1f}",
-        f"{arrow} {delta:.1f}%"
-    )
-
-with col3:
-    avg_utilization = filtered_df['Utilization rate'].mean()
-    prev_util = avg_utilization * 0.95
-    delta = ((avg_utilization - prev_util) / prev_util) * 100
-    arrow = "↗️" if delta > 0 else "↘️"
-    st.metric(
-        "Average Utilization",
-        f"{avg_utilization:.1f}%",
-        f"{arrow} {delta:.1f}%"
-    )
-
-with col4:
-    total_revenue = filtered_df['Billed hours value'].sum()
-    prev_revenue = total_revenue * 0.95
-    delta = ((total_revenue - prev_revenue) / prev_revenue) * 100
-    arrow = "↗️" if delta > 0 else "↘️"
-    st.metric(
-        "Total Revenue",
-        f"${total_revenue:,.2f}",
-        f"{arrow} {delta:.1f}%"
-    )
-
-# Display summary visualizations
-st.markdown("### Summary Visualizations")
-col1, col2 = st.columns(2)
-
-with col1:
-    # Hours Distribution Pie Chart
-    hours_data = pd.DataFrame({
-        'Category': ['Billed Hours', 'Unbilled Hours', 'Non-billable Hours'],
-        'Hours': [
-            filtered_df['Billed hours'].sum(),
-            filtered_df['Unbilled hours'].sum(),
-            filtered_df['Non-billable hours'].sum()
-        ]
-    })
+def main():
+    # Load data
+    df = load_data()
     
-    fig_hours = px.pie(
-        hours_data,
-        values='Hours',
-        names='Category',
-        title='Distribution of Hours',
-        color_discrete_sequence=px.colors.qualitative.Set3
-    )
-    st.plotly_chart(fig_hours, use_container_width=True)
-
-with col2:
-    # Practice Area Revenue Distribution
-    practice_revenue = filtered_df.groupby('Practice area').agg({
-        'Billed hours value': 'sum'
-    }).reset_index()
+    # Create sidebar filters
+    create_sidebar_filters(df)
     
-    fig_practice = px.pie(
-        practice_revenue,
-        values='Billed hours value',
-        names='Practice area',
-        title='Revenue by Practice Area'
-    )
-    st.plotly_chart(fig_practice, use_container_width=True)
+    # Apply filters
+    filtered_df = apply_filters(df)
+    
+    # Main page content
+    st.title("Scale LLP Analytics Dashboard")
+    st.markdown(f"*Last refreshed: Wednesday Feb 19, 2025*")
+    
+    # Add date range note
+    if st.session_state.filters['start_date'] and st.session_state.filters['end_date']:
+        st.markdown(f"*Showing data from {st.session_state.filters['start_date'].strftime('%B %d, %Y')} to {st.session_state.filters['end_date'].strftime('%B %d, %Y')}*")
 
-# Add custom CSS for styling
-st.markdown("""
-<style>
-    .metric-card {
-        background-color: #f8f9fa;
-        border-radius: 10px;
-        padding: 20px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    .metric-value {
-        font-size: 24px;
-        font-weight: bold;
-        color: #1f77b4;
-    }
-    .metric-delta {
-        font-size: 14px;
-    }
-    .metric-delta.positive {
-        color: #28a745;
-    }
-    .metric-delta.negative {
-        color: #dc3545;
-    }
-    .plot-container {
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        border-radius: 10px;
-        padding: 15px;
-        background-color: white;
-    }
-    .stApp {
-        background-color: #ffffff;
-    }
-    .main .block-container {
-        padding-top: 2rem;
-        padding-bottom: 2rem;
-    }
-    h1 {
-        color: #2c3e50;
-    }
-    .stSidebar .sidebar-content {
-        background-color: #f8f9fa;
-    }
-    .css-1d391kg {
-        padding-top: 3rem;
-    }
-</style>
-""", unsafe_allow_html=True)
+    # Welcome message
+    st.write("""
+    Welcome to the Scale LLP Analytics Dashboard. This dashboard provides comprehensive insights into the firm's performance metrics, 
+    client relationships, attorney productivity, and practice area analysis. Refreshed Weekly on Friday at 12:00 AM PST 
 
-# Add export functionality for raw data
-st.sidebar.markdown("---")
-if st.sidebar.button("Export Raw Data"):
-    csv = filtered_df.to_csv(index=False).encode('utf-8')
-    st.sidebar.download_button(
-        "Download CSV",
-        csv,
-        "scale_llp_data.csv",
-        "text/csv",
-        key='download-csv'
-    )
+    📊 **Available Pages:**
+    - Overview: Key performance metrics and high-level insights
+    - Client Analysis: Detailed client performance and relationship metrics
+    - Attorney Analysis: Individual attorney performance and productivity metrics
+    - Practice Areas: Practice-specific analysis and trends
+    - Trending: Historical trends and performance patterns
 
-# Display last refresh time in sidebar
-st.sidebar.markdown("---")
-st.sidebar.markdown("*Last data refresh:*  \nWednesday Feb 19, 2025")
+    Use the filters in the sidebar to customize the view according to your needs.
+    """)
+
+    # Display key metrics
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        total_billable_hours = filtered_df['Billed & Unbilled hours'].sum()
+        prev_total = total_billable_hours * 0.95
+        delta = ((total_billable_hours - prev_total) / prev_total) * 100
+        arrow = "↗️" if delta > 0 else "↘️"
+        st.metric(
+            "Total Billable Hours",
+            f"{total_billable_hours:,.1f}",
+            f"{arrow} {delta:.1f}%"
+        )
+
+    with col2:
+        total_billed = filtered_df['Billed hours'].sum()
+        prev_billed = total_billed * 0.95
+        delta = ((total_billed - prev_billed) / prev_billed) * 100
+        arrow = "↗️" if delta > 0 else "↘️"
+        st.metric(
+            "Billed Hours",
+            f"{total_billed:,.1f}",
+            f"{arrow} {delta:.1f}%"
+        )
+
+    with col3:
+        avg_utilization = filtered_df['Utilization rate'].mean()
+        prev_util = avg_utilization * 0.95
+        delta = ((avg_utilization - prev_util) / prev_util) * 100
+        arrow = "↗️" if delta > 0 else "↘️"
+        st.metric(
+            "Average Utilization",
+            f"{avg_utilization:.1f}%",
+            f"{arrow} {delta:.1f}%"
+        )
+
+    with col4:
+        total_revenue = filtered_df['Billed hours value'].sum()
+        prev_revenue = total_revenue * 0.95
+        delta = ((total_revenue - prev_revenue) / prev_revenue) * 100
+        arrow = "↗️" if delta > 0 else "↘️"
+        st.metric(
+            "Total Revenue",
+            f"${total_revenue:,.2f}",
+            f"{arrow} {delta:.1f}%"
+        )
+
+    # Display summary visualizations
+    st.markdown("### Summary Visualizations")
+    col1, col2 = st.columns(2)
+
+    with col1:
+        # Hours Distribution Pie Chart
+        hours_data = pd.DataFrame({
+            'Category': ['Billed Hours', 'Unbilled Hours', 'Non-billable Hours'],
+            'Hours': [
+                filtered_df['Billed hours'].sum(),
+                filtered_df['Unbilled hours'].sum(),
+                filtered_df['Non-billable hours'].sum()
+            ]
+        })
+        
+        fig_hours = px.pie(
+            hours_data,
+            values='Hours',
+            names='Category',
+            title='Distribution of Hours',
+            color_discrete_sequence=px.colors.qualitative.Set3
+        )
+        st.plotly_chart(fig_hours, use_container_width=True)
+
+    with col2:
+        # Practice Area Revenue Distribution
+        practice_revenue = filtered_df.groupby('Practice area').agg({
+            'Billed hours value': 'sum'
+        }).reset_index()
+        
+        fig_practice = px.pie(
+            practice_revenue,
+            values='Billed hours value',
+            names='Practice area',
+            title='Revenue by Practice Area'
+        )
+        st.plotly_chart(fig_practice, use_container_width=True)
+
+    # Add custom CSS for styling
+    st.markdown("""
+    <style>
+        .metric-card {
+            background-color: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .metric-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #1f77b4;
+        }
+        .metric-delta {
+            font-size: 14px;
+        }
+        .metric-delta.positive {
+            color: #28a745;
+        }
+        .metric-delta.negative {
+            color: #dc3545;
+        }
+        .plot-container {
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border-radius: 10px;
+            padding: 15px;
+            background-color: white;
+        }
+        .stApp {
+            background-color: #ffffff;
+        }
+        .main .block-container {
+            padding-top: 2rem;
+            padding-bottom: 2rem;
+        }
+        h1 {
+            color: #2c3e50;
+        }
+        .stSidebar .sidebar-content {
+            background-color: #f8f9fa;
+        }
+        .css-1d391kg {
+            padding-top: 3rem;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # Add export functionality for raw data
+    st.sidebar.markdown("---")
+    if st.sidebar.button("Export Raw Data"):
+        csv = filtered_df.to_csv(index=False).encode('utf-8')
+        st.sidebar.download_button(
+            "Download CSV",
+            csv,
+            "scale_llp_data.csv",
+            "text/csv",
+            key='download-csv'
+        )
+
+    # Display last refresh time in sidebar
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("*Last data refresh:*  \nWednesday Feb 19, 2025")
+
+if __name__ == "__main__":
+    main()
