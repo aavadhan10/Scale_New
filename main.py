@@ -80,9 +80,17 @@ def filter_data(df):
 filtered_df = filter_data(df)
 
 # Calculate period-over-period changes for metrics
-def calculate_delta(df, column, current_period, previous_period):
-    current = float(df[df['Activity date'].dt.period == current_period][column].sum())
-    previous = float(df[df['Activity date'].dt.period == previous_period][column].sum())
+def calculate_delta(df, column):
+    if df.empty:
+        return 0.0
+        
+    df['month'] = df['Activity date'].dt.to_period('M')
+    current_month = df['month'].max()
+    previous_month = current_month - 1
+    
+    current = float(df[df['month'] == current_month][column].sum())
+    previous = float(df[df['month'] == previous_month][column].sum())
+    
     delta = ((current - previous) / previous * 100) if previous != 0 else 0
     return delta
 
@@ -93,33 +101,28 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs(["Overview", "Client Analysis", "Attorney
 with tab1:
     st.header('Key Performance Metrics')
     
-    # Calculate deltas for metrics
-    current_month = pd.Period(datetime.now(), freq='M')
-    previous_month = current_month - 1
-    
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
         total_billable_hours = float(filtered_df['Billed & Unbilled hours'].sum())
-        delta_billable = calculate_delta(filtered_df, 'Billed & Unbilled hours', current_month, previous_month)
+        delta_billable = calculate_delta(filtered_df, 'Billed & Unbilled hours')
         st.metric("Total Billable Hours", 
                  f"{total_billable_hours:,.1f}", 
-                 f"{delta_billable:+.1f}%")
+                 f"{delta_billable:+.1f}%" if delta_billable != 0 else None)
 
     with col2:
         total_billed_hours = float(filtered_df['Billed hours'].sum())
-        delta_billed = calculate_delta(filtered_df, 'Billed hours', current_month, previous_month)
+        delta_billed = calculate_delta(filtered_df, 'Billed hours')
         st.metric("Billed Hours", 
                  f"{total_billed_hours:,.1f}", 
-                 f"{delta_billed:+.1f}%")
+                 f"{delta_billed:+.1f}%" if delta_billed != 0 else None)
 
     with col3:
         avg_utilization = float(filtered_df['Utilization rate'].mean())
-        prev_utilization = float(df[df['Activity date'].dt.period == previous_month]['Utilization rate'].mean())
-        delta_utilization = avg_utilization - prev_utilization
+        delta_utilization = calculate_delta(filtered_df, 'Utilization rate')
         st.metric("Utilization Rate", 
                  f"{avg_utilization:.1f}%", 
-                 f"{delta_utilization:+.1f}%")
+                 f"{delta_utilization:+.1f}%" if delta_utilization != 0 else None)
 
     with col4:
         total_billed_value = float(filtered_df['Billed hours value'].sum())
@@ -293,57 +296,6 @@ with tab5:
     )
     
     st.plotly_chart(fig, use_container_width=True)
-
-    # Add year-over-year comparison
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Monthly totals comparison
-        monthly_comparison = filtered_df.groupby(
-            [filtered_df['Activity date'].dt.year, 
-             filtered_df['Activity date'].dt.month]
-        ).agg({
-            'Billed hours': 'sum',
-            'Billed hours value': 'sum'
-        }).reset_index()
-        
-        fig = px.bar(monthly_comparison, 
-                    x='month', 
-                    y='Billed hours',
-                    color='year',
-                    title='Year-over-Year Monthly Comparison',
-                    labels={'month': 'Month', 'Billed hours': 'Billed Hours'})
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        # Rolling averages
-        rolling_metrics = filtered_df.set_index('Activity date').rolling('30D').agg({
-            'Billed hours': 'mean',
-            'Utilization rate': 'mean'
-        }).reset_index()
-        
-        fig = px.line(rolling_metrics, 
-                     x='Activity date', 
-                     y=['Billed hours', 'Utilization rate'],
-                     title='30-Day Rolling Averages',
-                     labels={'value': 'Value', 'variable': 'Metric'})
-        st.plotly_chart(fig, use_container_width=True)
-
-    # Trending tables
-    st.subheader('Trending Metrics')
-    
-    # Monthly growth rates
-    monthly_growth = time_metrics.copy()
-    monthly_growth['Billed Hours Growth'] = monthly_growth['Billed hours'].pct_change() * 100
-    monthly_growth['Revenue Growth'] = monthly_growth['Billed hours value'].pct_change() * 100
-    monthly_growth['Utilization Change'] = monthly_growth['Utilization rate'].diff()
-    
-    growth_metrics = monthly_growth[['Activity date', 
-                                   'Billed Hours Growth', 
-                                   'Revenue Growth', 
-                                   'Utilization Change']].round(2)
-    
-    st.dataframe(growth_metrics)
 
 # Add CSS to style the tabs
 st.markdown("""
