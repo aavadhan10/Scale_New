@@ -129,19 +129,17 @@ top_5_clients = filtered_df.groupby('Company name')['Billed hours value'].sum().
 
 # Prepare trend data
 client_trends = filtered_df[filtered_df['Company name'].isin(top_5_clients)].groupby(
-    ['Activity Year', 'Activity month', 'Company name']
+    ['Activity date', 'Company name']
 ).agg({
     'Billed hours value': 'sum'
 }).reset_index()
 
-client_trends['Date'] = pd.to_datetime(
-    client_trends['Activity Year'].astype(int).astype(str) + '-' + 
-    client_trends['Activity month'].astype(int).astype(str).str.zfill(2) + '-01'
-)
+# Sort by date
+client_trends = client_trends.sort_values('Activity date')
 
 fig_trends = px.line(
     client_trends,
-    x='Date',
+    x='Activity date',
     y='Billed hours value',
     color='Company name',
     title='Revenue Trends - Top 5 Clients',
