@@ -12,50 +12,37 @@ st.set_page_config(page_title="Law Firm Analytics Dashboard", layout="wide")
 @st.cache_data
 def load_data():
     try:
-        # Read the CSV file
         df = pd.read_csv("Test_Full_Year.csv")
-        
-        # Clean column names (remove quotes and **) and strip whitespace
         df.columns = df.columns.str.replace('*', '').str.replace('"', '').str.strip()
         
-        # Extract year from Activity date after cleaning
-        try:
-            # First, print the Activity date column for debugging
-            st.write("Sample Activity date values:", df['Activity date'].head())
-            
-            # Extract year using string operations
-            df['Year'] = df['Activity date'].apply(lambda x: str(x).split('/')[2] if str(x).count('/') == 2 else None)
-            df['Year'] = pd.to_numeric(df['Year'], errors='coerce')
-            
-            # Convert numeric columns
-            numeric_cols = ['Activity month', 'Activity quarter', 'Activity day', 
-                           'Billed & Unbilled hours', 'Billed hours', 'Utilization rate',
-                           'Billed hours value', 'Non-billable hours']
-            for col in numeric_cols:
-                if col in df.columns:
-                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-                    
-            st.write("Columns after cleaning:", df.columns.tolist())
-            return df
-            
-        except Exception as e:
-            st.error(f"Error processing dates: {str(e)}")
-            return pd.DataFrame()
-            
+        # Extract year from Activity date
+        df['Year'] = df['Activity date'].str.split('/').str[-1]
+        df['Year'] = pd.to_numeric(df['Year'], errors='coerce')
+        
+        # Convert numeric columns
+        numeric_cols = ['Activity month', 'Activity quarter', 'Activity day', 
+                       'Billed & Unbilled hours', 'Billed hours', 'Utilization rate',
+                       'Billed hours value', 'Non-billable hours']
+        for col in numeric_cols:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        return df
     except Exception as e:
-        st.error(f"Error loading data: {str(e)}")
         return pd.DataFrame()
 
-# Load data with debug information
+# Load data
 df = load_data()
 
-if df.empty:
-    st.error("No data loaded. Please check the data format.")
-    st.stop()
+# Sidebar filters
+st.sidebar.header('Filters')
 
-# Debug information
-st.sidebar.write("Debug Info:")
-st.sidebar.write("Available columns:", df.columns.tolist())
+# Year filter
+years = sorted(df['Year'].dropna().unique())
+selected_years = st.sidebar.multiselect(
+    'Select Years',
+    options=years,
+    default=[years[0]] if len(years) > 0 else []
+)
 
 # Load data
 df = load_data()
