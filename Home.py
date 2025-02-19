@@ -290,7 +290,7 @@ st.markdown(f"*Last refreshed: Wednesday Feb 19, 2025*")
 # Welcome message
 st.write("""
 Welcome to the Scale LLP Analytics Dashboard. This dashboard provides comprehensive insights into the firm's performance metrics, 
-client relationships, attorney productivity, and practice area analysis.
+client relationships, attorney productivity, and practice area analysis. Refreshed Weekly on Friday's at 12:00 AM PST 
 
 📊 **Available Pages:**
 - Overview: Key performance metrics and high-level insights
