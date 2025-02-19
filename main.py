@@ -11,14 +11,27 @@ st.set_page_config(page_title="Law Firm Analytics Dashboard", layout="wide")
 # Function to load and prepare data
 @st.cache_data
 def load_data():
-    df = pd.read_csv("Test_Full_Year.csv")
-    
-    # Convert date columns to datetime
-    date_columns = ['Activity date', 'Matter open date', 'Matter pending date', 'Matter close date']
-    for col in date_columns:
-        df[col] = pd.to_datetime(df[col])
-    
-    return df
+    try:
+        # Read the CSV file
+        df = pd.read_csv("Test_Full_Year.csv")
+        
+        # Convert date columns to datetime with proper error handling
+        date_columns = ['Activity date', 'Matter open date', 'Matter pending date', 'Matter close date']
+        for col in date_columns:
+            # First, check if the column exists
+            if col in df.columns:
+                try:
+                    # Try parsing with multiple formats
+                    df[col] = pd.to_datetime(df[col], format='mixed', errors='coerce')
+                except Exception as e:
+                    st.warning(f"Warning: Could not parse some dates in {col}. They will be treated as missing values.")
+            else:
+                st.warning(f"Warning: Column {col} not found in the dataset")
+        
+        return df
+    except Exception as e:
+        st.error(f"Error loading data: {str(e)}")
+        return None
 
 # Load data
 df = load_data()
