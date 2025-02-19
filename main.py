@@ -55,13 +55,15 @@ st.sidebar.header('Filters')
 st.sidebar.subheader('Time Filters')
 date_filter_type = st.sidebar.radio(
     "Select Date Filter Type",
-    ["Month/Quarter", "Custom Range"]
+    ["Month/Quarter", "Custom Range"],
+    key="date_filter_type_radio"
 )
 
 if date_filter_type == "Month/Quarter":
     filter_level = st.sidebar.radio(
         "Filter by",
-        ["Month", "Quarter"]
+        ["Month", "Quarter"],
+        key="month_quarter_radio"
     )
     
     if filter_level == "Month":
