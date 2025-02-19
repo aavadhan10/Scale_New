@@ -12,12 +12,44 @@ st.set_page_config(page_title="Law Firm Analytics Dashboard", layout="wide")
 @st.cache_data
 def load_data():
     try:
+        # Read the CSV file
         df = pd.read_csv("Test_Full_Year.csv")
-        df['Activity date'] = pd.to_datetime(df['Activity date'])
+        
+        # Clean column names (remove ** from column names)
+        df.columns = df.columns.str.replace('*', '').str.strip()
+        
+        # Convert Activity date to datetime using mixed format
+        df['Activity date'] = pd.to_datetime(df['Activity date'], format='mixed')
+        
+        # Convert numeric columns
+        numeric_columns = [
+            'Activity month',
+            'Activity quarter',
+            'Activity day',
+            'Billed & Unbilled hours',
+            'Billed hours',
+            'Unbilled hours',
+            'Non-billable hours',
+            'Billed hours value',
+            'Utilization rate'
+        ]
+        
+        for col in numeric_columns:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        
         return df
     except Exception as e:
         st.error(f"Error loading data: {str(e)}")
+        st.write("Columns in the dataframe:", df.columns.tolist())  # Debug info
         return pd.DataFrame()
+
+# Load data
+df = load_data()
+
+# Display data info for debugging
+st.sidebar.write("Debug Info:")
+st.sidebar.write("Available columns:", df.columns.tolist())
 
 # Load data
 df = load_data()
@@ -39,57 +71,72 @@ start_date = None
 end_date = None
 filter_level = None
 
-if date_filter_type == "Month/Quarter":
-    filter_level = st.sidebar.radio(
-        "Filter by",
-        ["Month", "Quarter"]
-    )
-    
-    if filter_level == "Month":
-        months = sorted(df['Activity month'].unique())
-        selected_months = st.sidebar.multiselect(
-            'Select Months',
-            options=months,
-            default=[months[0]] if len(months) > 0 else []
-        )
-    else:
-        quarters = sorted(df['Activity quarter'].unique())
-        selected_quarters = st.sidebar.multiselect(
-            'Select Quarters',
-            options=quarters,
-            default=[quarters[0]] if len(quarters) > 0 else []
-        )
+if df.empty:
+    st.error("No data available. Please check the data loading process.")
 else:
-    min_date = df['Activity date'].min()
-    max_date = df['Activity date'].max()
-    start_date = st.sidebar.date_input('Start Date', min_date)
-    end_date = st.sidebar.date_input('End Date', max_date)
+    if date_filter_type == "Month/Quarter":
+        filter_level = st.sidebar.radio(
+            "Filter by",
+            ["Month", "Quarter"]
+        )
+        
+        if filter_level == "Month":
+            try:
+                months = sorted(df['Activity month'].astype(int).unique())
+                selected_months = st.sidebar.multiselect(
+                    'Select Months',
+                    options=months,
+                    default=[months[0]] if len(months) > 0 else []
+                )
+            except Exception as e:
+                st.error(f"Error loading months: {str(e)}")
+        else:
+            try:
+                quarters = sorted(df['Activity quarter'].astype(int).unique())
+                selected_quarters = st.sidebar.multiselect(
+                    'Select Quarters',
+                    options=quarters,
+                    default=[quarters[0]] if len(quarters) > 0 else []
+                )
+            except Exception as e:
+                st.error(f"Error loading quarters: {str(e)}")
+    else:
+        try:
+            min_date = df['Activity date'].min()
+            max_date = df['Activity date'].max()
+            start_date = st.sidebar.date_input('Start Date', min_date)
+            end_date = st.sidebar.date_input('End Date', max_date)
+        except Exception as e:
+            st.error(f"Error setting up date range: {str(e)}")
 
-# Other filters
-selected_attorney = st.sidebar.multiselect(
-    'Attorneys',
-    options=sorted(df['User full name (first, last)'].unique())
-)
+# Other filters with error handling
+try:
+    selected_attorney = st.sidebar.multiselect(
+        'Attorneys',
+        options=sorted(df['User full name (first, last)'].dropna().unique())
+    )
 
-selected_practice = st.sidebar.multiselect(
-    'Practice Areas',
-    options=sorted(df['Practice area'].dropna().unique())
-)
+    selected_practice = st.sidebar.multiselect(
+        'Practice Areas',
+        options=sorted(df['Practice area'].dropna().unique())
+    )
 
-selected_location = st.sidebar.multiselect(
-    'Matter Locations',
-    options=sorted(df['Matter location'].dropna().unique())
-)
+    selected_location = st.sidebar.multiselect(
+        'Matter Locations',
+        options=sorted(df['Matter location'].dropna().unique())
+    )
 
-selected_status = st.sidebar.multiselect(
-    'Matter Status',
-    options=sorted(df['Matter status'].dropna().unique())
-)
+    selected_status = st.sidebar.multiselect(
+        'Matter Status',
+        options=sorted(df['Matter status'].dropna().unique())
+    )
 
-selected_client = st.sidebar.multiselect(
-    'Clients',
-    options=sorted(df['Company name'].dropna().unique())
-)
+    selected_client = st.sidebar.multiselect(
+        'Clients',
+        options=sorted(df['Company name'].dropna().unique())
+    )
+except Exception as e:
+    st.error(f"Error setting up filters: {str(e)}")
 
 def filter_data(df):
     filtered_df = df.copy()
