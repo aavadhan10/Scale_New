@@ -20,7 +20,7 @@ def load_data():
     
     # Convert numeric columns
     numeric_columns = [
-        'Activity Year', 'Activity month', 'Activity quarter',
+        'Activity Year', 'Activity month', 'Activity quarter', 'Activity day',
         'Non-billable hours', 'Non-billable hours value',
         'Billed & Unbilled hours', 'Billed & Unbilled hours value',
         'Unbilled hours', 'Unbilled hours value',
@@ -35,6 +35,10 @@ def load_data():
             df[col] = pd.to_numeric(df[col], errors='coerce')
     
     df['Activity Year'] = df['Activity Year'].astype(str).str.replace(',', '').astype(float)
+    
+    # Convert Activity date to datetime if it exists
+    if 'Activity date' in df.columns:
+        df['Activity date'] = pd.to_datetime(df['Activity date'])
     
     # Attorney levels mapping
     attorney_levels = {
@@ -154,6 +158,7 @@ if 'filters' not in st.session_state:
         'years': [],
         'months': [],
         'quarters': [],
+        'days': [],  # Added days filter
         'attorney_levels': [],
         'attorneys': [],
         'practices': [],
@@ -194,6 +199,14 @@ def create_sidebar_filters():
     st.session_state.filters['quarters'] = st.sidebar.multiselect(
         'Select Quarters',
         options=[f'Q{q}' for q in quarters],
+        default=[]
+    )
+    
+    # Day filter
+    days = sorted(df['Activity day'].dropna().unique().astype(int).tolist())
+    st.session_state.filters['days'] = st.sidebar.multiselect(
+        'Select Days',
+        options=days,
         default=[]
     )
     
@@ -257,6 +270,9 @@ def apply_filters(df):
         selected_quarter_numbers = [int(q[1]) for q in st.session_state.filters['quarters']]
         filtered = filtered[filtered['Activity quarter'].isin(selected_quarter_numbers)]
     
+    if st.session_state.filters['days']:
+        filtered = filtered[filtered['Activity day'].isin(st.session_state.filters['days'])]
+    
     if st.session_state.filters['attorney_levels']:
         filtered = filtered[filtered['Attorney level'].isin(st.session_state.filters['attorney_levels'])]
     
@@ -301,6 +317,7 @@ client relationships, attorney productivity, and practice area analysis. Refresh
 
 Use the filters in the sidebar to customize the view according to your needs.
 """)
+
 # Display key metrics on the home page
 col1, col2, col3, col4 = st.columns(4)
 
