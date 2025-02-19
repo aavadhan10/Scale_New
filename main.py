@@ -14,9 +14,22 @@ def load_data():
     df = pd.read_csv("Test_Full_Year.csv")
     
     # Convert numeric columns
-    df['Activity Year'] = pd.to_numeric(df['Activity Year'], errors='coerce')
-    df['Activity month'] = pd.to_numeric(df['Activity month'], errors='coerce')
-    df['Activity quarter'] = pd.to_numeric(df['Activity quarter'], errors='coerce')
+    numeric_columns = [
+        'Activity Year', 'Activity month', 'Activity quarter',
+        'Non-billable hours', 'Non-billable hours value',
+        'Billed & Unbilled hours', 'Billed & Unbilled hours value',
+        'Unbilled hours', 'Unbilled hours value',
+        'Billed hours', 'Billed hours value',
+        'Utilization rate', 'Tracked hours',
+        'User rate'
+    ]
+    
+    for col in numeric_columns:
+        if col in df.columns:
+            # First replace empty strings with NaN
+            df[col] = df[col].replace('', pd.NA)
+            # Then convert to numeric, coercing errors to NaN
+            df[col] = pd.to_numeric(df[col], errors='coerce')
     
     # Format year correctly (remove comma if present)
     df['Activity Year'] = df['Activity Year'].astype(str).str.replace(',', '').astype(float)
@@ -118,20 +131,20 @@ with tab1:
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        total_billable_hours = filtered_df['Billed & Unbilled hours'].astype(float).sum()
+        total_billable_hours = filtered_df['Billed & Unbilled hours'].sum()
         st.metric("Total Billable Hours", f"{total_billable_hours:,.1f}")
 
     with col2:
-        total_billed_hours = filtered_df['Billed hours'].astype(float).sum()
+        total_billed_hours = filtered_df['Billed hours'].sum()
         st.metric("Billed Hours", f"{total_billed_hours:,.1f}")
 
     with col3:
-        avg_utilization = filtered_df['Utilization rate'].astype(float).mean()
+        avg_utilization = filtered_df['Utilization rate'].mean()
         st.metric("Average Utilization", f"{avg_utilization:.1f}%")
 
     with col4:
-        total_value = filtered_df['Billed hours value'].astype(float).sum()
-        total_hours = filtered_df['Billed hours'].astype(float).sum()
+        total_value = filtered_df['Billed hours value'].sum()
+        total_hours = filtered_df['Billed hours'].sum()
         avg_rate = total_value / total_hours if total_hours > 0 else 0
         st.metric("Average Rate", f"${avg_rate:.2f}/hr")
 
