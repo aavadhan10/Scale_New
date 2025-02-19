@@ -9,6 +9,7 @@ import calendar
 st.set_page_config(page_title="Attorney Analysis - Scale LLP Dashboard", layout="wide")
 
 # Load data function
+@st.cache_data
 def load_data():
     df = pd.read_csv("Test_Full_Year.csv")
     
@@ -27,12 +28,147 @@ def load_data():
             df[col] = df[col].replace('', pd.NA)
             df[col] = pd.to_numeric(df[col], errors='coerce')
     
-    df['Activity Year'] = df['Activity Year'].astype(str).str.replace(',', '').astype(float)
+    # Convert Activity date to datetime
+    df['Activity date'] = pd.to_datetime(df['Activity date'])
     return df
 
-# Load and filter data
+# Initialize session state for filters
+if 'filters' not in st.session_state:
+    st.session_state.filters = {
+        'date_range': [],
+        'quarters': [],
+        'attorney_levels': [],
+        'attorneys': [],
+        'practices': [],
+        'locations': [],
+        'statuses': [],
+        'clients': []
+    }
+
+# Load data
 df = load_data()
-filtered_df = df  # Apply your filtering logic here
+
+# Create sidebar filters
+def create_sidebar_filters():
+    st.sidebar.header('Filters')
+    
+    # Time period filters
+    st.sidebar.subheader('Time Period Filters')
+    
+    # Date Range filter
+    min_date = df['Activity date'].min()
+    max_date = df['Activity date'].max()
+    
+    start_date = st.sidebar.date_input(
+        "Start Date",
+        min_date,
+        min_value=min_date,
+        max_value=max_date
+    )
+    
+    end_date = st.sidebar.date_input(
+        "End Date",
+        max_date,
+        min_value=min_date,
+        max_value=max_date
+    )
+    
+    st.session_state.filters['date_range'] = [start_date, end_date]
+    
+    # Quarter filter
+    quarters = sorted(df['Activity quarter'].dropna().unique().astype(int).tolist())
+    st.session_state.filters['quarters'] = st.sidebar.multiselect(
+        'Select Quarters',
+        options=[f'Q{q}' for q in quarters],
+        default=[]
+    )
+    
+    # Other filters
+    st.sidebar.subheader('Other Filters')
+    
+    # Attorney level filter
+    attorney_levels = sorted(df['Attorney level'].dropna().unique())
+    st.session_state.filters['attorney_levels'] = st.sidebar.multiselect(
+        'Attorney Levels',
+        options=attorney_levels
+    )
+    
+    # Attorney filter
+    attorneys = sorted(df['User full name (first, last)'].dropna().unique())
+    st.session_state.filters['attorneys'] = st.sidebar.multiselect(
+        'Attorneys',
+        options=attorneys
+    )
+    
+    # Practice area filter
+    practices = sorted(df['Practice area'].dropna().unique())
+    st.session_state.filters['practices'] = st.sidebar.multiselect(
+        'Practice Areas',
+        options=practices
+    )
+    
+    # Location filter
+    locations = sorted(df['Matter location'].dropna().unique())
+    st.session_state.filters['locations'] = st.sidebar.multiselect(
+        'Matter Locations',
+        options=locations
+    )
+    
+    # Status filter
+    statuses = sorted(df['Matter status'].dropna().unique())
+    st.session_state.filters['statuses'] = st.sidebar.multiselect(
+        'Matter Status',
+        options=statuses
+    )
+    
+    # Client filter
+    clients = sorted(df['Company name'].dropna().unique())
+    st.session_state.filters['clients'] = st.sidebar.multiselect(
+        'Clients',
+        options=clients
+    )
+
+# Function to apply filters
+def apply_filters(df):
+    filtered = df.copy()
+    
+    # Apply date range filter
+    if st.session_state.filters['date_range']:
+        start_date, end_date = st.session_state.filters['date_range']
+        filtered = filtered[
+            (filtered['Activity date'].dt.date >= start_date) &
+            (filtered['Activity date'].dt.date <= end_date)
+        ]
+    
+    if st.session_state.filters['quarters']:
+        selected_quarter_numbers = [int(q[1]) for q in st.session_state.filters['quarters']]
+        filtered = filtered[filtered['Activity quarter'].isin(selected_quarter_numbers)]
+    
+    if st.session_state.filters['attorney_levels']:
+        filtered = filtered[filtered['Attorney level'].isin(st.session_state.filters['attorney_levels'])]
+    
+    if st.session_state.filters['attorneys']:
+        filtered = filtered[filtered['User full name (first, last)'].isin(st.session_state.filters['attorneys'])]
+    
+    if st.session_state.filters['practices']:
+        filtered = filtered[filtered['Practice area'].isin(st.session_state.filters['practices'])]
+    
+    if st.session_state.filters['locations']:
+        filtered = filtered[filtered['Matter location'].isin(st.session_state.filters['locations'])]
+    
+    if st.session_state.filters['statuses']:
+        filtered = filtered[filtered['Matter status'].isin(st.session_state.filters['statuses'])]
+    
+    if st.session_state.filters['clients']:
+        filtered = filtered[filtered['Company name'].isin(st.session_state.filters['clients'])]
+    
+    return filtered
+
+# Create sidebar filters
+create_sidebar_filters()
+
+# Apply filters to get filtered dataframe
+filtered_df = apply_filters(df)
 
 # Page Header
 st.title("Attorney Analysis")
@@ -194,18 +330,13 @@ top_5_attorneys = filtered_df.groupby('User full name (first, last)')['Billed ho
 
 attorney_trends = filtered_df[
     filtered_df['User full name (first, last)'].isin(top_5_attorneys)
-].groupby(['Activity Year', 'Activity month', 'User full name (first, last)']).agg({
+].groupby(['Activity date', 'User full name (first, last)']).agg({
     'Utilization rate': 'mean'
 }).reset_index()
 
-attorney_trends['Date'] = pd.to_datetime(
-    attorney_trends['Activity Year'].astype(str) + '-' + 
-    attorney_trends['Activity month'].astype(str) + '-01'
-)
-
 fig_trends = px.line(
     attorney_trends,
-    x='Date',
+    x='Activity date',
     y='Utilization rate',
     color='User full name (first, last)',
     title='Utilization Rate Trends - Top 5 Attorneys',
@@ -257,43 +388,4 @@ st.dataframe(
 csv = attorney_detail_metrics.to_csv(index=False).encode('utf-8')
 st.download_button(
     "Export Attorney Metrics to CSV",
-    csv,
-    "attorney_metrics.csv",
-    "text/csv",
-    key='download-attorney-metrics'
-)
-
-# Custom CSS for styling
-st.markdown("""
-<style>
-    .metric-card {
-        background-color: #f8f9fa;
-        border-radius: 10px;
-        padding: 20px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    .metric-value {
-        font-size: 24px;
-        font-weight: bold;
-        color: #1f77b4;
-    }
-    .metric-delta {
-        font-size: 14px;
-    }
-    .metric-delta.positive {
-        color: #28a745;
-    }
-    .metric-delta.negative {
-        color: #dc3545;
-    }
-    .plot-container {
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        border-radius: 10px;
-        padding: 15px;
-        background-color: white;
-    }
-    .dataframe {
-        font-size: 12px;
-    }
-</style>
-""", unsafe_allow_html=True)
+    
