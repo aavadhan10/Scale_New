@@ -20,16 +20,14 @@ def load_data():
         
         for col in date_columns:
             if col in df.columns:
-                # Handle empty or missing values first
-                df[col] = df[col].fillna('')
-                
                 # Convert to datetime using a specific format
                 df[col] = pd.to_datetime(df[col], format='%m/%d/%Y', errors='coerce')
                 
-                # Notify about any dates that couldn't be parsed
-                missing_dates = df[col].isna().sum()
-                if missing_dates > 0:
-                    st.warning(f"{missing_dates} dates in {col} could not be parsed and were set to NaT")
+                # Only show warning for Activity date since other dates can be legitimately empty
+                if col == 'Activity date':
+                    missing_dates = df[col].isna().sum()
+                    if missing_dates > 0:
+                        st.warning(f"{missing_dates} dates in {col} could not be parsed and were set to NaT")
         
         # Remove any rows where Activity date is NaT (if Activity date is crucial)
         if 'Activity date' in df.columns:
@@ -81,16 +79,44 @@ selected_year = st.sidebar.selectbox('Year', range(current_year-5, current_year+
 selected_quarter = st.sidebar.selectbox('Quarter', [f'Q{i}' for i in range(1, 5)])
 selected_month = st.sidebar.selectbox('Month', list(calendar.month_name)[1:])
 
+# Helper function to get clean unique values
+def get_clean_options(df, column):
+    return sorted(list(df[column].dropna().unique()))
+
 # User filters
 selected_attorney = st.sidebar.multiselect(
     'Attorneys',
-    options=sorted(df['User full name (first, last)'].unique())
+    options=get_clean_options(df, 'User full name (first, last)')
 )
 
 # Practice area filter
 selected_practice = st.sidebar.multiselect(
     'Practice Areas',
-    options=sorted(df['Practice area'].unique())
+    options=get_clean_options(df, 'Practice area')
+)
+
+# Location filter
+selected_location = st.sidebar.multiselect(
+    'Matter Locations',
+    options=get_clean_options(df, 'Matter location')
+)
+
+# Matter status filter
+selected_status = st.sidebar.multiselect(
+    'Matter Status',
+    options=get_clean_options(df, 'Matter status')
+)
+
+# Billing method filter
+selected_billing = st.sidebar.multiselect(
+    'Matter Billing Method',
+    options=get_clean_options(df, 'Matter billing method')
+)
+
+# Client filter
+selected_client = st.sidebar.multiselect(
+    'Clients',
+    options=get_clean_options(df, 'Company name')
 )
 
 # Apply filters function (same as before)
