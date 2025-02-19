@@ -12,23 +12,45 @@ st.set_page_config(page_title="Law Firm Analytics Dashboard", layout="wide")
 @st.cache_data
 def load_data():
     try:
+        # Read the CSV file
         df = pd.read_csv("Test_Full_Year.csv")
         
-        # Ensure date columns are properly parsed
+        # Print initial debugging information
+        st.write("Original DataFrame Columns:", list(df.columns))
+        st.write("Original DataFrame Head:", df.head())
+        
+        # Ensure date and year columns are properly parsed
         date_columns = ['Activity date', 'Matter open date', 'Matter pending date', 'Matter close date']
         for col in date_columns:
             if col in df.columns:
                 df[col] = pd.to_datetime(df[col], errors='coerce')
         
-        # Add derived columns if not present
-        if 'Activity Year' not in df.columns and 'Activity date' in df.columns:
-            df['Activity Year'] = df['Activity date'].dt.year
+        # Derive Activity Year column if not present or problematic
+        if 'Activity Year' not in df.columns or df['Activity Year'].isnull().all():
+            # Try to extract year from Activity date
+            if 'Activity date' in df.columns:
+                df['Activity Year'] = pd.to_datetime(df['Activity date'], errors='coerce').dt.year
         
-        if 'Activity month' not in df.columns and 'Activity date' in df.columns:
-            df['Activity month'] = df['Activity date'].dt.month
+        # Convert Activity Year to integer, handling potential string issues
+        df['Activity Year'] = pd.to_numeric(df['Activity Year'], errors='coerce')
         
-        if 'Activity quarter' not in df.columns and 'Activity date' in df.columns:
-            df['Activity quarter'] = df['Activity date'].dt.quarter
+        # Derive Activity month column
+        if 'Activity month' not in df.columns or df['Activity month'].isnull().all():
+            if 'Activity date' in df.columns:
+                df['Activity month'] = pd.to_datetime(df['Activity date'], errors='coerce').dt.month
+        
+        # Convert Activity month to integer
+        df['Activity month'] = pd.to_numeric(df['Activity month'], errors='coerce')
+        
+        # Derive Activity quarter column
+        if 'Activity quarter' not in df.columns or df['Activity quarter'].isnull().all():
+            if 'Activity month' in df.columns:
+                df['Activity quarter'] = ((df['Activity month'] - 1) // 3 + 1).astype(int)
+        
+        # Print debugging information after processing
+        st.write("Processed DataFrame Head:", df.head())
+        st.write("Unique Years:", df['Activity Year'].dropna().unique())
+        st.write("Unique Months:", df['Activity month'].dropna().unique())
         
         return df
     except Exception as e:
@@ -47,9 +69,11 @@ st.sidebar.header('Filters')
 # Safely get unique values with default
 def get_unique_values(df, column, default_first=True):
     try:
-        values = sorted(df[column].dropna().unique())
+        # Remove NaN and convert to integers
+        values = sorted(df[column].dropna().unique().astype(int))
         return values if values else []
-    except Exception:
+    except Exception as e:
+        st.error(f"Error getting unique values for {column}: {e}")
         return []
 
 # Year filter
@@ -63,60 +87,20 @@ selected_years = st.sidebar.multiselect(
 
 # Safely get months
 months = get_unique_values(df, 'Activity month')
-month_names = [calendar.month_name[int(m)] for m in months]
 
-# Time filters
-filter_section = st.sidebar.radio(
-    "Select Additional Time Filter",
-    ["Month/Quarter", "Custom Range"],
-    key="time_filter_type"
-)
+# Safe month name conversion
+def safe_month_name(month):
+    try:
+        # Ensure month is an integer between 1 and 12
+        month = int(month)
+        if 1 <= month <= 12:
+            return calendar.month_name[month]
+        return str(month)
+    except (ValueError, TypeError):
+        return str(month)
 
-month_selection = []
-quarter_selection = []
-start_month = None
-end_month = None
+month_names = [safe_month_name(m) for m in months]
 
-if filter_section == "Month/Quarter":
-    level = st.sidebar.radio(
-        "Filter by",
-        ["Month", "Quarter"],
-        key="month_quarter_level"
-    )
-    
-    if level == "Month":
-        # Convert months to month names for display
-        month_selection = st.sidebar.multiselect(
-            'Select Months',
-            options=months,
-            default=[months[0]] if months else [],
-            format_func=lambda x: calendar.month_name[int(x)],
-            key="month_select"
-        )
-    else:
-        quarters = get_unique_values(df, 'Activity quarter')
-        quarter_selection = st.sidebar.multiselect(
-            'Select Quarters',
-            options=quarters,
-            default=[quarters[0]] if quarters else [],
-            format_func=lambda x: f'Q{int(x)}',
-            key="quarter_select"
-        )
-else:
-    # Custom Range
-    start_month = st.sidebar.selectbox(
-        'Start Month', 
-        options=months, 
-        format_func=lambda x: calendar.month_name[int(x)],
-        key="start_month"
-    )
-    end_month = st.sidebar.selectbox(
-        'End Month',
-        options=months,
-        format_func=lambda x: calendar.month_name[int(x)],
-        index=len(months)-1 if months else 0,
-        key="end_month"
-    )
 
 # Other filters with safe value extraction
 attorneys = st.sidebar.multiselect(
