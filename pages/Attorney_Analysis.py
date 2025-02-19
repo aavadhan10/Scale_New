@@ -4,236 +4,266 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
 import calendar
-import sys
-import os
-
-# Import functions from Home.py
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from Home import load_data, apply_filters, create_sidebar_filters
 
 # Page config
-st.set_page_config(page_title="Client Analysis - Scale LLP Dashboard", layout="wide")
+st.set_page_config(page_title="Attorney Analysis - Scale LLP Dashboard", layout="wide")
 
-# Load data and create filters
+# Load data function
+def load_data():
+    df = pd.read_csv("Test_Full_Year.csv")
+    
+    numeric_columns = [
+        'Activity Year', 'Activity month', 'Activity quarter',
+        'Non-billable hours', 'Non-billable hours value',
+        'Billed & Unbilled hours', 'Billed & Unbilled hours value',
+        'Unbilled hours', 'Unbilled hours value',
+        'Billed hours', 'Billed hours value',
+        'Utilization rate', 'Tracked hours',
+        'User rate'
+    ]
+    
+    for col in numeric_columns:
+        if col in df.columns:
+            df[col] = df[col].replace('', pd.NA)
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+    
+    df['Activity Year'] = df['Activity Year'].astype(str).str.replace(',', '').astype(float)
+    return df
+
+# Load and filter data
 df = load_data()
-create_sidebar_filters()
-filtered_df = apply_filters(df)
+filtered_df = df  # Apply your filtering logic here
 
 # Page Header
-st.title("Client Analysis")
+st.title("Attorney Analysis")
 st.markdown(f"*Last refreshed: Wednesday Feb 19, 2025*")
 
-# Key Client Metrics
-st.markdown("### Key Client Metrics")
+# Attorney Overview Metrics
+st.markdown("### Key Attorney Metrics")
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    total_clients = filtered_df['Company name'].nunique()
-    prev_clients = total_clients * 0.95
-    delta = ((total_clients - prev_clients) / prev_clients) * 100
+    total_attorneys = filtered_df['User full name (first, last)'].nunique()
+    prev_attorneys = total_attorneys * 0.95
+    delta = ((total_attorneys - prev_attorneys) / prev_attorneys) * 100
     arrow = "↗️" if delta > 0 else "↘️"
     st.metric(
-        "Total Active Clients",
-        f"{total_clients:,}",
+        "Total Attorneys",
+        f"{total_attorneys:,}",
         f"{arrow} {delta:.1f}%"
     )
 
 with col2:
-    avg_revenue_per_client = filtered_df.groupby('Company name')['Billed hours value'].sum().mean()
-    prev_avg = avg_revenue_per_client * 0.95
-    delta = ((avg_revenue_per_client - prev_avg) / prev_avg) * 100
+    avg_utilization = filtered_df['Utilization rate'].mean()
+    prev_util = avg_utilization * 0.95
+    delta = ((avg_utilization - prev_util) / prev_util) * 100
     arrow = "↗️" if delta > 0 else "↘️"
     st.metric(
-        "Avg Revenue per Client",
-        f"${avg_revenue_per_client:,.2f}",
+        "Average Utilization",
+        f"{avg_utilization:.1f}%",
         f"{arrow} {delta:.1f}%"
     )
 
 with col3:
-    avg_hours_per_client = filtered_df.groupby('Company name')['Billed hours'].sum().mean()
-    prev_hours = avg_hours_per_client * 0.95
-    delta = ((avg_hours_per_client - prev_hours) / prev_hours) * 100
+    avg_revenue_per_attorney = filtered_df.groupby('User full name (first, last)')['Billed hours value'].sum().mean()
+    prev_revenue = avg_revenue_per_attorney * 0.95
+    delta = ((avg_revenue_per_attorney - prev_revenue) / prev_revenue) * 100
     arrow = "↗️" if delta > 0 else "↘️"
     st.metric(
-        "Avg Hours per Client",
-        f"{avg_hours_per_client:.1f}",
+        "Avg Revenue per Attorney",
+        f"${avg_revenue_per_attorney:,.2f}",
         f"{arrow} {delta:.1f}%"
     )
 
 with col4:
-    total_matters = filtered_df['Matter number'].nunique()
-    prev_matters = total_matters * 0.95
-    delta = ((total_matters - prev_matters) / prev_matters) * 100
+    avg_hours_per_attorney = filtered_df.groupby('User full name (first, last)')['Billed hours'].sum().mean()
+    prev_hours = avg_hours_per_attorney * 0.95
+    delta = ((avg_hours_per_attorney - prev_hours) / prev_hours) * 100
     arrow = "↗️" if delta > 0 else "↘️"
     st.metric(
-        "Total Active Matters",
-        f"{total_matters:,}",
+        "Avg Hours per Attorney",
+        f"{avg_hours_per_attorney:.1f}",
         f"{arrow} {delta:.1f}%"
     )
 
-# Top Clients Analysis
-st.markdown("### Top Clients Overview")
+# Attorney Performance Matrix
+st.markdown("### Attorney Performance Matrix")
+attorney_metrics = filtered_df.groupby('User full name (first, last)').agg({
+    'Billed hours': 'sum',
+    'Utilization rate': 'mean',
+    'Billed hours value': 'sum'
+}).reset_index()
+
+fig_matrix = px.scatter(
+    attorney_metrics,
+    x='Billed hours',
+    y='Utilization rate',
+    size='Billed hours value',
+    hover_name='User full name (first, last)',
+    title='Attorney Performance Matrix',
+    labels={
+        'Billed hours': 'Total Billed Hours',
+        'Utilization rate': 'Utilization Rate (%)',
+        'Billed hours value': 'Revenue'
+    }
+)
+st.plotly_chart(fig_matrix, use_container_width=True)
+
+# Attorney Level Analysis
+st.markdown("### Analysis by Attorney Level")
 col1, col2 = st.columns(2)
 
 with col1:
-    # Top 10 Clients by Revenue
-    top_clients_revenue = filtered_df.groupby('Company name').agg({
+    # Revenue by Attorney Level
+    level_revenue = filtered_df.groupby('Attorney level').agg({
+        'Billed hours value': 'sum'
+    }).reset_index()
+    
+    fig_level_revenue = px.pie(
+        level_revenue,
+        values='Billed hours value',
+        names='Attorney level',
+        title='Revenue Distribution by Attorney Level'
+    )
+    st.plotly_chart(fig_level_revenue, use_container_width=True)
+
+with col2:
+    # Utilization by Attorney Level
+    level_util = filtered_df.groupby('Attorney level').agg({
+        'Utilization rate': 'mean'
+    }).reset_index()
+    
+    fig_level_util = px.bar(
+        level_util,
+        x='Attorney level',
+        y='Utilization rate',
+        title='Average Utilization Rate by Attorney Level'
+    )
+    st.plotly_chart(fig_level_util, use_container_width=True)
+
+# Attorney Practice Area Distribution
+st.markdown("### Practice Area Distribution")
+attorney_practice = filtered_df.groupby(
+    ['User full name (first, last)', 'Practice area']
+).agg({
+    'Billed hours': 'sum'
+}).reset_index()
+
+fig_practice = px.sunburst(
+    attorney_practice,
+    path=['User full name (first, last)', 'Practice area'],
+    values='Billed hours',
+    title='Attorney Distribution Across Practice Areas'
+)
+st.plotly_chart(fig_practice, use_container_width=True)
+
+# Top Performers
+st.markdown("### Top Performing Attorneys")
+col1, col2 = st.columns(2)
+
+with col1:
+    # Top 10 by Revenue
+    top_revenue = filtered_df.groupby('User full name (first, last)').agg({
         'Billed hours value': 'sum'
     }).sort_values('Billed hours value', ascending=True).tail(10)
     
     fig_top_revenue = px.bar(
-        top_clients_revenue,
-        x='Billed hours value',
-        y=top_clients_revenue.index,
-        title='Top 10 Clients by Revenue',
-        orientation='h'
+        top_revenue,
+        orientation='h',
+        title='Top 10 Attorneys by Revenue'
     )
-    fig_top_revenue.update_layout(yaxis_title="Client", xaxis_title="Revenue ($)")
     st.plotly_chart(fig_top_revenue, use_container_width=True)
 
 with col2:
-    # Top 10 Clients by Hours
-    top_clients_hours = filtered_df.groupby('Company name').agg({
-        'Billed hours': 'sum'
-    }).sort_values('Billed hours', ascending=True).tail(10)
+    # Top 10 by Utilization
+    top_util = filtered_df.groupby('User full name (first, last)').agg({
+        'Utilization rate': 'mean'
+    }).sort_values('Utilization rate', ascending=True).tail(10)
     
-    fig_top_hours = px.bar(
-        top_clients_hours,
-        x='Billed hours',
-        y=top_clients_hours.index,
-        title='Top 10 Clients by Billed Hours',
-        orientation='h'
+    fig_top_util = px.bar(
+        top_util,
+        orientation='h',
+        title='Top 10 Attorneys by Utilization Rate'
     )
-    fig_top_hours.update_layout(yaxis_title="Client", xaxis_title="Billed Hours")
-    st.plotly_chart(fig_top_hours, use_container_width=True)
+    st.plotly_chart(fig_top_util, use_container_width=True)
 
-# Client Practice Area Distribution
-st.markdown("### Client Distribution by Practice Area")
-client_practice = filtered_df.groupby(['Practice area', 'Company name']).agg({
-    'Billed hours': 'sum'
+# Attorney Utilization Trends
+st.markdown("### Attorney Utilization Trends")
+# Get top 5 attorneys by revenue for trend analysis
+top_5_attorneys = filtered_df.groupby('User full name (first, last)')['Billed hours value'].sum().nlargest(5).index
+
+attorney_trends = filtered_df[
+    filtered_df['User full name (first, last)'].isin(top_5_attorneys)
+].groupby(['Activity Year', 'Activity month', 'User full name (first, last)']).agg({
+    'Utilization rate': 'mean'
 }).reset_index()
 
-fig_practice = px.treemap(
-    client_practice,
-    path=['Practice area', 'Company name'],
-    values='Billed hours',
-    title='Client Distribution Across Practice Areas'
-)
-st.plotly_chart(fig_practice, use_container_width=True)
-
-# Client Revenue Trends
-st.markdown("### Client Revenue Trends")
-
-# Get top 5 clients for trend analysis
-top_5_clients = filtered_df.groupby('Company name')['Billed hours value'].sum().nlargest(5).index
-
-# Prepare trend data
-client_trends = filtered_df[filtered_df['Company name'].isin(top_5_clients)].groupby(
-    ['Activity Year', 'Activity month', 'Company name']
-).agg({
-    'Billed hours value': 'sum'
-}).reset_index()
-
-client_trends['Date'] = pd.to_datetime(
-    client_trends['Activity Year'].astype(int).astype(str) + '-' + 
-    client_trends['Activity month'].astype(int).astype(str).str.zfill(2) + '-01'
+attorney_trends['Date'] = pd.to_datetime(
+    attorney_trends['Activity Year'].astype(str) + '-' + 
+    attorney_trends['Activity month'].astype(str) + '-01'
 )
 
 fig_trends = px.line(
-    client_trends,
+    attorney_trends,
     x='Date',
-    y='Billed hours value',
-    color='Company name',
-    title='Revenue Trends - Top 5 Clients',
+    y='Utilization rate',
+    color='User full name (first, last)',
+    title='Utilization Rate Trends - Top 5 Attorneys',
     markers=True
 )
 fig_trends.update_layout(
     xaxis_title="Date",
-    yaxis_title="Revenue ($)",
+    yaxis_title="Utilization Rate (%)",
     hovermode='x unified'
 )
 st.plotly_chart(fig_trends, use_container_width=True)
 
-# Client Matter Analysis
-st.markdown("### Client Matter Analysis")
-col1, col2 = st.columns(2)
+# Detailed Attorney Metrics Table
+st.markdown("### Detailed Attorney Metrics")
 
-with col1:
-    # Matters per Client
-    matters_per_client = filtered_df.groupby('Company name')['Matter number'].nunique().sort_values(ascending=True).tail(10)
-    
-    fig_matters = px.bar(
-        matters_per_client,
-        orientation='h',
-        title='Top 10 Clients by Number of Matters'
-    )
-    fig_matters.update_layout(yaxis_title="Client", xaxis_title="Number of Matters")
-    st.plotly_chart(fig_matters, use_container_width=True)
-
-with col2:
-    # Average Rate by Client
-    avg_rate_by_client = (
-        filtered_df.groupby('Company name').agg({
-            'Billed hours value': 'sum',
-            'Billed hours': 'sum'
-        })
-    )
-    avg_rate_by_client['Average Rate'] = avg_rate_by_client['Billed hours value'] / avg_rate_by_client['Billed hours']
-    avg_rate_by_client = avg_rate_by_client.sort_values('Average Rate', ascending=True).tail(10)
-    
-    fig_rates = px.bar(
-        avg_rate_by_client,
-        y=avg_rate_by_client.index,
-        x='Average Rate',
-        title='Top 10 Clients by Average Hourly Rate',
-        orientation='h'
-    )
-    fig_rates.update_layout(yaxis_title="Client", xaxis_title="Average Rate ($)")
-    st.plotly_chart(fig_rates, use_container_width=True)
-
-# Detailed Client Metrics Table
-st.markdown("### Detailed Client Metrics")
-
-client_metrics = filtered_df.groupby('Company name').agg({
+attorney_detail_metrics = filtered_df.groupby('User full name (first, last)').agg({
     'Billed hours': 'sum',
     'Billed hours value': 'sum',
     'Matter number': 'nunique',
-    'Utilization rate': 'mean'
+    'Utilization rate': 'mean',
+    'User rate': 'first',
+    'Attorney level': 'first'
 }).round(2)
 
 # Calculate additional metrics
-client_metrics['Average Hourly Rate'] = (
-    client_metrics['Billed hours value'] / client_metrics['Billed hours']
+attorney_detail_metrics['Revenue per Hour'] = (
+    attorney_detail_metrics['Billed hours value'] / attorney_detail_metrics['Billed hours']
 ).round(2)
 
-client_metrics = client_metrics.reset_index()
-client_metrics.columns = [
-    'Client', 'Total Hours', 'Total Revenue', 'Number of Matters',
-    'Average Utilization', 'Average Hourly Rate'
+attorney_detail_metrics = attorney_detail_metrics.reset_index()
+attorney_detail_metrics.columns = [
+    'Attorney Name', 'Total Hours', 'Total Revenue', 'Number of Matters',
+    'Average Utilization', 'Standard Rate', 'Attorney Level', 'Effective Rate'
 ]
 
 # Format the metrics
-client_metrics['Total Revenue'] = client_metrics['Total Revenue'].apply(lambda x: f"${x:,.2f}")
-client_metrics['Average Hourly Rate'] = client_metrics['Average Hourly Rate'].apply(lambda x: f"${x:,.2f}")
-client_metrics['Average Utilization'] = client_metrics['Average Utilization'].apply(lambda x: f"{x:.1f}%")
+attorney_detail_metrics['Total Revenue'] = attorney_detail_metrics['Total Revenue'].apply(lambda x: f"${x:,.2f}")
+attorney_detail_metrics['Standard Rate'] = attorney_detail_metrics['Standard Rate'].apply(lambda x: f"${x:,.2f}")
+attorney_detail_metrics['Effective Rate'] = attorney_detail_metrics['Effective Rate'].apply(lambda x: f"${x:,.2f}")
+attorney_detail_metrics['Average Utilization'] = attorney_detail_metrics['Average Utilization'].apply(lambda x: f"{x:.1f}%")
 
 # Display the table with sorting enabled
 st.dataframe(
-    client_metrics.sort_values('Total Hours', ascending=False),
+    attorney_detail_metrics.sort_values('Total Hours', ascending=False),
     use_container_width=True
 )
 
 # Add export functionality
-csv = client_metrics.to_csv(index=False).encode('utf-8')
+csv = attorney_detail_metrics.to_csv(index=False).encode('utf-8')
 st.download_button(
-    "Export Client Metrics to CSV",
+    "Export Attorney Metrics to CSV",
     csv,
-    "client_metrics.csv",
+    "attorney_metrics.csv",
     "text/csv",
-    key='download-client-metrics'
+    key='download-attorney-metrics'
 )
 
-# Add styling
+# Custom CSS for styling
 st.markdown("""
 <style>
     .metric-card {
