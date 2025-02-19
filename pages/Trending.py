@@ -5,35 +5,20 @@ import plotly.graph_objects as go
 from datetime import datetime
 import calendar
 from plotly.subplots import make_subplots
+import sys
+import os
+
+# Import functions from Home.py
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from Home import load_data, apply_filters, create_sidebar_filters
 
 # Page config
 st.set_page_config(page_title="Trending Analysis - Scale LLP Dashboard", layout="wide")
 
-# Load data function
-def load_data():
-    df = pd.read_csv("Test_Full_Year.csv")
-    
-    numeric_columns = [
-        'Activity Year', 'Activity month', 'Activity quarter',
-        'Non-billable hours', 'Non-billable hours value',
-        'Billed & Unbilled hours', 'Billed & Unbilled hours value',
-        'Unbilled hours', 'Unbilled hours value',
-        'Billed hours', 'Billed hours value',
-        'Utilization rate', 'Tracked hours',
-        'User rate'
-    ]
-    
-    for col in numeric_columns:
-        if col in df.columns:
-            df[col] = df[col].replace('', pd.NA)
-            df[col] = pd.to_numeric(df[col], errors='coerce')
-    
-    df['Activity Year'] = df['Activity Year'].astype(str).str.replace(',', '').astype(float)
-    return df
-
-# Load and filter data
+# Load data and create filters
 df = load_data()
-filtered_df = df  # Apply your filtering logic here
+create_sidebar_filters()
+filtered_df = apply_filters(df)
 
 # Page Header
 st.title("Trending Analysis")
@@ -51,9 +36,10 @@ monthly_trends = filtered_df.groupby(['Activity Year', 'Activity month']).agg({
     'Company name': 'nunique'
 }).reset_index()
 
+# Fix date handling
 monthly_trends['Date'] = pd.to_datetime(
-    monthly_trends['Activity Year'].astype(str) + '-' + 
-    monthly_trends['Activity month'].astype(str) + '-01'
+    monthly_trends['Activity Year'].astype(int).astype(str) + '-' + 
+    monthly_trends['Activity month'].astype(int).astype(str).str.zfill(2) + '-01'
 )
 
 # Create subplot with multiple metrics
@@ -145,8 +131,8 @@ practice_trends = filtered_df.groupby(['Activity Year', 'Activity month', 'Pract
 }).reset_index()
 
 practice_trends['Date'] = pd.to_datetime(
-    practice_trends['Activity Year'].astype(str) + '-' + 
-    practice_trends['Activity month'].astype(str) + '-01'
+    practice_trends['Activity Year'].astype(int).astype(str) + '-' + 
+    practice_trends['Activity month'].astype(int).astype(str).str.zfill(2) + '-01'
 )
 
 # Top 5 practice areas
@@ -174,8 +160,8 @@ level_trends = filtered_df.groupby(['Activity Year', 'Activity month', 'Attorney
 }).reset_index()
 
 level_trends['Date'] = pd.to_datetime(
-    level_trends['Activity Year'].astype(str) + '-' + 
-    level_trends['Activity month'].astype(str) + '-01'
+    level_trends['Activity Year'].astype(int).astype(str) + '-' + 
+    level_trends['Activity month'].astype(int).astype(str).str.zfill(2) + '-01'
 )
 
 col1, col2 = st.columns(2)
@@ -204,7 +190,7 @@ with col2:
     )
     st.plotly_chart(fig_level_util, use_container_width=True)
 
-# Client Growth Trends
+# Client Growth Analysis
 st.markdown("### Client Growth Analysis")
 
 # Monthly client metrics
@@ -214,8 +200,8 @@ client_trends = filtered_df.groupby(['Activity Year', 'Activity month']).agg({
 }).reset_index()
 
 client_trends['Date'] = pd.to_datetime(
-    client_trends['Activity Year'].astype(str) + '-' + 
-    client_trends['Activity month'].astype(str) + '-01'
+    client_trends['Activity Year'].astype(int).astype(str) + '-' + 
+    client_trends['Activity month'].astype(int).astype(str).str.zfill(2) + '-01'
 )
 
 # Create subplot for client metrics
@@ -300,7 +286,7 @@ st.download_button(
     key='download-quarterly-metrics'
 )
 
-# Custom CSS for styling
+# Add styling
 st.markdown("""
 <style>
     .metric-card {
