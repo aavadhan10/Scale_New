@@ -321,13 +321,14 @@ with tab1:
         st.plotly_chart(fig, use_container_width=True)
 
     with col2:
-        monthly_hours = filtered_df.groupby(filtered_df['Activity date'].dt.to_period('M')).agg({
+        # Monthly trend using Period instead of Activity date
+        monthly_hours = filtered_df.groupby('Period').agg({
             'Billed hours': 'sum'
         }).reset_index()
-        monthly_hours['Activity date'] = monthly_hours['Activity date'].astype(str)
         
-        fig = px.line(monthly_hours, x='Activity date', y='Billed hours',
+        fig = px.line(monthly_hours, x='Period', y='Billed hours',
                      title='Monthly Billed Hours Trend')
+        fig.update_layout(xaxis_tickangle=-45)
         st.plotly_chart(fig, use_container_width=True)
 
 # Tab 2: Client Analysis
