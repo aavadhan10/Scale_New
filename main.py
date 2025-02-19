@@ -1,4 +1,4 @@
-import streamlit as st
+mport streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -17,24 +17,60 @@ def load_data():
         
         # Convert date columns to datetime with proper error handling
         date_columns = ['Activity date', 'Matter open date', 'Matter pending date', 'Matter close date']
+        
         for col in date_columns:
-            # First, check if the column exists
             if col in df.columns:
-                try:
-                    # Try parsing with multiple formats
-                    df[col] = pd.to_datetime(df[col], format='mixed', errors='coerce')
-                except Exception as e:
-                    st.warning(f"Warning: Could not parse some dates in {col}. They will be treated as missing values.")
-            else:
-                st.warning(f"Warning: Column {col} not found in the dataset")
+                # Handle empty or missing values first
+                df[col] = df[col].fillna('')
+                
+                # Convert to datetime using a specific format
+                df[col] = pd.to_datetime(df[col], format='%m/%d/%Y', errors='coerce')
+                
+                # Notify about any dates that couldn't be parsed
+                missing_dates = df[col].isna().sum()
+                if missing_dates > 0:
+                    st.warning(f"{missing_dates} dates in {col} could not be parsed and were set to NaT")
+        
+        # Remove any rows where Activity date is NaT (if Activity date is crucial)
+        if 'Activity date' in df.columns:
+            initial_rows = len(df)
+            df = df.dropna(subset=['Activity date'])
+            dropped_rows = initial_rows - len(df)
+            if dropped_rows > 0:
+                st.warning(f"{dropped_rows} rows were dropped due to invalid Activity dates")
         
         return df
+    
     except Exception as e:
         st.error(f"Error loading data: {str(e)}")
-        return None
+        st.error("Please ensure your CSV file contains properly formatted dates (MM/DD/YYYY)")
+        return pd.DataFrame()  # Return empty DataFrame instead of None
 
 # Load data
 df = load_data()
+
+# Validate that we have the required columns
+required_columns = [
+    'Activity date', 
+    'Billed hours',
+    'Unbilled hours',
+    'Non-billable hours',
+    'Billed hours value',
+    'Utilization rate',
+    'User full name (first, last)',
+    'Practice area',
+    'Company name'
+]
+
+missing_columns = [col for col in required_columns if col not in df.columns]
+if missing_columns:
+    st.error(f"Missing required columns: {', '.join(missing_columns)}")
+    st.stop()
+
+# Check if we have any data
+if df.empty:
+    st.error("No data available to display")
+    st.stop()
 
 # Sidebar filters (same as before)
 st.sidebar.header('Filters')
