@@ -152,7 +152,7 @@ def filter_data(df):
     
     # Apply year filter first
     if selected_years:
-        filtered = filtered[filtered['Year'].isin(selected_years)]
+        filtered = filtered[filtered['Activity Year'].isin(selected_years)]
     
     # Apply month/quarter filters
     if filter_section == "Month/Quarter":
