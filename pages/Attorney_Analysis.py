@@ -23,14 +23,14 @@ filtered_df = apply_filters(df)
 st.title("Attorney Analysis")
 st.markdown(f"*Last refreshed: Wednesday Feb 19, 2025*")
 
-# Key Attorney Metrics
+# Key Attorney Metrics with zero division handling
 st.markdown("### Key Attorney Metrics")
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
     total_attorneys = filtered_df['User full name (first, last)'].nunique()
-    prev_attorneys = total_attorneys * 0.95
-    delta = ((total_attorneys - prev_attorneys) / prev_attorneys) * 100
+    prev_attorneys = max(total_attorneys * 0.95, 1)  # Prevent zero division
+    delta = ((total_attorneys - prev_attorneys) / prev_attorneys) * 100 if prev_attorneys > 0 else 0
     arrow = "↗️" if delta > 0 else "↘️"
     st.metric(
         "Total Attorneys",
@@ -40,8 +40,8 @@ with col1:
 
 with col2:
     avg_utilization = filtered_df['Utilization rate'].mean()
-    prev_util = avg_utilization * 0.95
-    delta = ((avg_utilization - prev_util) / prev_util) * 100
+    prev_util = max(avg_utilization * 0.95, 1)  # Prevent zero division
+    delta = ((avg_utilization - prev_util) / prev_util) * 100 if prev_util > 0 else 0
     arrow = "↗️" if delta > 0 else "↘️"
     st.metric(
         "Average Utilization",
@@ -51,8 +51,8 @@ with col2:
 
 with col3:
     avg_revenue_per_attorney = filtered_df.groupby('User full name (first, last)')['Billed hours value'].sum().mean()
-    prev_revenue = avg_revenue_per_attorney * 0.95
-    delta = ((avg_revenue_per_attorney - prev_revenue) / prev_revenue) * 100
+    prev_revenue = max(avg_revenue_per_attorney * 0.95, 1)  # Prevent zero division
+    delta = ((avg_revenue_per_attorney - prev_revenue) / prev_revenue) * 100 if prev_revenue > 0 else 0
     arrow = "↗️" if delta > 0 else "↘️"
     st.metric(
         "Avg Revenue per Attorney",
@@ -62,8 +62,8 @@ with col3:
 
 with col4:
     avg_hours_per_attorney = filtered_df.groupby('User full name (first, last)')['Billed hours'].sum().mean()
-    prev_hours = avg_hours_per_attorney * 0.95
-    delta = ((avg_hours_per_attorney - prev_hours) / prev_hours) * 100
+    prev_hours = max(avg_hours_per_attorney * 0.95, 1)  # Prevent zero division
+    delta = ((avg_hours_per_attorney - prev_hours) / prev_hours) * 100 if prev_hours > 0 else 0
     arrow = "↗️" if delta > 0 else "↘️"
     st.metric(
         "Avg Hours per Attorney",
@@ -79,6 +79,10 @@ attorney_metrics = filtered_df.groupby('User full name (first, last)').agg({
     'Billed hours value': 'sum',
     'Attorney level': 'first'
 }).reset_index()
+
+# Handle any null or infinite values
+attorney_metrics = attorney_metrics.fillna(0)
+attorney_metrics = attorney_metrics.replace([float('inf'), float('-inf')], 0)
 
 fig_matrix = px.scatter(
     attorney_metrics,
@@ -129,22 +133,6 @@ with col2:
     )
     st.plotly_chart(fig_level_util, use_container_width=True)
 
-# Practice Area Distribution
-st.markdown("### Practice Area Distribution")
-attorney_practice = filtered_df.groupby(
-    ['User full name (first, last)', 'Practice area', 'Attorney level']
-).agg({
-    'Billed hours': 'sum'
-}).reset_index()
-
-fig_practice = px.sunburst(
-    attorney_practice,
-    path=['Attorney level', 'User full name (first, last)', 'Practice area'],
-    values='Billed hours',
-    title='Attorney Distribution Across Practice Areas'
-)
-st.plotly_chart(fig_practice, use_container_width=True)
-
 # Attorney Utilization Trends
 st.markdown("### Attorney Utilization Trends")
 # Get top 5 attorneys by revenue for trend analysis
@@ -156,6 +144,7 @@ attorney_trends = filtered_df[
     'Utilization rate': 'mean'
 }).reset_index()
 
+# Fix date handling
 attorney_trends['Date'] = pd.to_datetime(
     attorney_trends['Activity Year'].astype(int).astype(str) + '-' + 
     attorney_trends['Activity month'].astype(int).astype(str).str.zfill(2) + '-01'
@@ -181,12 +170,14 @@ st.markdown("### Performance Metrics by Attorney Level")
 col1, col2 = st.columns(2)
 
 with col1:
-    level_hours = filtered_df.groupby(['Attorney level', 'Activity month']).agg({
+    level_hours = filtered_df.groupby(['Attorney level', 'Activity Year', 'Activity month']).agg({
         'Billed hours': 'sum'
     }).reset_index()
     
+    # Fix date handling
     level_hours['Date'] = pd.to_datetime(
-        '2024-' + level_hours['Activity month'].astype(str).str.zfill(2) + '-01'
+        level_hours['Activity Year'].astype(int).astype(str) + '-' + 
+        level_hours['Activity month'].astype(int).astype(str).str.zfill(2) + '-01'
     )
     
     fig_level_hours = px.line(
@@ -200,12 +191,14 @@ with col1:
     st.plotly_chart(fig_level_hours, use_container_width=True)
 
 with col2:
-    level_revenue = filtered_df.groupby(['Attorney level', 'Activity month']).agg({
+    level_revenue = filtered_df.groupby(['Attorney level', 'Activity Year', 'Activity month']).agg({
         'Billed hours value': 'sum'
     }).reset_index()
     
+    # Fix date handling
     level_revenue['Date'] = pd.to_datetime(
-        '2024-' + level_revenue['Activity month'].astype(str).str.zfill(2) + '-01'
+        level_revenue['Activity Year'].astype(int).astype(str) + '-' + 
+        level_revenue['Activity month'].astype(int).astype(str).str.zfill(2) + '-01'
     )
     
     fig_level_revenue = px.line(
@@ -230,9 +223,10 @@ attorney_detail_metrics = filtered_df.groupby('User full name (first, last)').ag
     'Attorney level': 'first'
 }).round(2)
 
-# Calculate additional metrics
+# Calculate additional metrics with zero division handling
 attorney_detail_metrics['Revenue per Hour'] = (
-    attorney_detail_metrics['Billed hours value'] / attorney_detail_metrics['Billed hours']
+    attorney_detail_metrics['Billed hours value'] / 
+    attorney_detail_metrics['Billed hours'].replace(0, float('nan'))
 ).round(2)
 
 attorney_detail_metrics = attorney_detail_metrics.reset_index()
@@ -244,7 +238,7 @@ attorney_detail_metrics.columns = [
 # Format the metrics
 attorney_detail_metrics['Total Revenue'] = attorney_detail_metrics['Total Revenue'].apply(lambda x: f"${x:,.2f}")
 attorney_detail_metrics['Standard Rate'] = attorney_detail_metrics['Standard Rate'].apply(lambda x: f"${x:,.2f}")
-attorney_detail_metrics['Effective Rate'] = attorney_detail_metrics['Effective Rate'].apply(lambda x: f"${x:,.2f}")
+attorney_detail_metrics['Effective Rate'] = attorney_detail_metrics['Effective Rate'].apply(lambda x: f"${x:,.2f}" if pd.notnull(x) else "N/A")
 attorney_detail_metrics['Average Utilization'] = attorney_detail_metrics['Average Utilization'].apply(lambda x: f"{x:.1f}%")
 
 # Display the table with sorting enabled
