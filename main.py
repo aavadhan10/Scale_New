@@ -12,34 +12,18 @@ st.set_page_config(page_title="Law Firm Analytics Dashboard", layout="wide")
 @st.cache_data
 def load_data():
     try:
-        # Read the CSV file
         df = pd.read_csv("Test_Full_Year.csv")
         
-        # Clean column names (remove quotes and spaces)
-        df.columns = df.columns.str.replace('"', '').str.strip()
+        # Extract year from Activity date
+        df['Year'] = df['Activity date'].str[:10].str[-4:].astype(int)
         
         # Convert numeric columns
-        numeric_columns = [
-            'Activity month',
-            'Activity quarter',
-            'Activity day',
-            'Billed & Unbilled hours',
-            'Billed hours',
-            'Unbilled hours',
-            'Non-billable hours',
-            'Billed hours value',
-            'Utilization rate',
-            'User yearly working days',
-            'User rate'
-        ]
-        
-        for col in numeric_columns:
+        numeric_cols = ['Activity month', 'Activity quarter', 'Activity day', 
+                       'Billed & Unbilled hours', 'Billed hours', 'Utilization rate',
+                       'Billed hours value', 'Non-billable hours']
+        for col in numeric_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-        
-        # Create a period column for trending analysis
-        df['Period'] = df['Activity month'].astype(str).str.zfill(2) + '-' + '2024'
-        
         return df
     except Exception as e:
         st.error(f"Error loading data: {str(e)}")
@@ -51,228 +35,127 @@ df = load_data()
 # Sidebar filters
 st.sidebar.header('Filters')
 
-# Time filters
-st.sidebar.subheader('Time Filters')
-date_filter_type = st.sidebar.radio(
-    "Select Date Filter Type",
-    ["Month/Quarter", "Custom Range"],
-    key="date_filter_type_radio"
+# Year filter first
+years = sorted(df['Year'].unique())
+selected_years = st.sidebar.multiselect(
+    'Select Years',
+    options=years,
+    default=[years[0]] if len(years) > 0 else [],
+    key="year_select_000"
 )
 
-if date_filter_type == "Month/Quarter":
-    filter_level = st.sidebar.radio(
+# Time filters
+filter_section = st.sidebar.radio(
+    "Select Additional Time Filter",
+    ["Month/Quarter", "Custom Range"],
+    key="filter_section_radio_123"
+)
+
+if filter_section == "Month/Quarter":
+    level = st.sidebar.radio(
         "Filter by",
         ["Month", "Quarter"],
-        key="month_quarter_radio"
+        key="level_radio_456"
     )
     
-    if filter_level == "Month":
+    if level == "Month":
         months = sorted(df['Activity month'].unique())
-        selected_months = st.sidebar.multiselect(
+        month_selection = st.sidebar.multiselect(
             'Select Months',
             options=months,
             default=[months[0]] if len(months) > 0 else [],
-            format_func=lambda x: calendar.month_name[int(x)]
+            format_func=lambda x: calendar.month_name[int(x)],
+            key="month_select_789"
         )
     else:
         quarters = sorted(df['Activity quarter'].unique())
-        selected_quarters = st.sidebar.multiselect(
+        quarter_selection = st.sidebar.multiselect(
             'Select Quarters',
             options=quarters,
             default=[quarters[0]] if len(quarters) > 0 else [],
-            format_func=lambda x: f'Q{int(x)}'
+            format_func=lambda x: f'Q{int(x)}',
+            key="quarter_select_101112"
         )
 else:
-    # Use month range instead of dates
     months = sorted(df['Activity month'].unique())
-    start_month = st.sidebar.selectbox('Start Month', options=months, 
-                                     format_func=lambda x: calendar.month_name[int(x)])
-    end_month = st.sidebar.selectbox('End Month', options=months,
-                                   format_func=lambda x: calendar.month_name[int(x)],
-                                   index=len(months)-1)
+    start_month = st.sidebar.selectbox(
+        'Start Month', 
+        options=months, 
+        format_func=lambda x: calendar.month_name[int(x)],
+        key="start_month_131415"
+    )
+    end_month = st.sidebar.selectbox(
+        'End Month',
+        options=months,
+        format_func=lambda x: calendar.month_name[int(x)],
+        index=len(months)-1,
+        key="end_month_161718"
+    )
 
 # Other filters
-def get_unique_values(df, column):
-    return sorted(df[column].dropna().unique())
-
-selected_attorney = st.sidebar.multiselect(
+attorneys = st.sidebar.multiselect(
     'Attorneys',
-    options=get_unique_values(df, 'User full name (first, last)')
+    options=sorted(df['User full name (first, last)'].dropna().unique()),
+    key="attorney_select_192021"
 )
 
-selected_practice = st.sidebar.multiselect(
+practices = st.sidebar.multiselect(
     'Practice Areas',
-    options=get_unique_values(df, 'Practice area')
+    options=sorted(df['Practice area'].dropna().unique()),
+    key="practice_select_222324"
 )
 
-selected_location = st.sidebar.multiselect(
+locations = st.sidebar.multiselect(
     'Matter Locations',
-    options=get_unique_values(df, 'Matter location')
+    options=sorted(df['Matter location'].dropna().unique()),
+    key="location_select_252627"
 )
 
-selected_status = st.sidebar.multiselect(
+statuses = st.sidebar.multiselect(
     'Matter Status',
-    options=get_unique_values(df, 'Matter status')
+    options=sorted(df['Matter status'].dropna().unique()),
+    key="status_select_282930"
 )
 
-selected_client = st.sidebar.multiselect(
+clients = st.sidebar.multiselect(
     'Clients',
-    options=get_unique_values(df, 'Company name')
+    options=sorted(df['Company name'].dropna().unique()),
+    key="client_select_313233"
 )
 
+# Apply filters
 def filter_data(df):
-    filtered_df = df.copy()
+    filtered = df.copy()
     
-    # Time filtering
-    if date_filter_type == "Month/Quarter":
-        if filter_level == "Month" and selected_months:
-            filtered_df = filtered_df[filtered_df['Activity month'].isin(selected_months)]
-        elif filter_level == "Quarter" and selected_quarters:
-            filtered_df = filtered_df[filtered_df['Activity quarter'].isin(selected_quarters)]
+    # Apply year filter first
+    if selected_years:
+        filtered = filtered[filtered['Year'].isin(selected_years)]
+    
+    # Apply month/quarter filters
+    if filter_section == "Month/Quarter":
+        if level == "Month" and month_selection:
+            filtered = filtered[filtered['Activity month'].isin(month_selection)]
+        elif level == "Quarter" and quarter_selection:
+            filtered = filtered[filtered['Activity quarter'].isin(quarter_selection)]
     else:
-        # Month range filtering
-        filtered_df = filtered_df[
-            (filtered_df['Activity month'] >= start_month) & 
-            (filtered_df['Activity month'] <= end_month)
+        filtered = filtered[
+            (filtered['Activity month'] >= start_month) & 
+            (filtered['Activity month'] <= end_month)
         ]
     
-    # Other filters
-    if selected_attorney:
-        filtered_df = filtered_df[filtered_df['User full name (first, last)'].isin(selected_attorney)]
-    if selected_practice:
-        filtered_df = filtered_df[filtered_df['Practice area'].isin(selected_practice)]
-    if selected_location:
-        filtered_df = filtered_df[filtered_df['Matter location'].isin(selected_location)]
-    if selected_status:
-        filtered_df = filtered_df[filtered_df['Matter status'].isin(selected_status)]
-    if selected_client:
-        filtered_df = filtered_df[filtered_df['Company name'].isin(selected_client)]
+    # Apply other filters
+    if attorneys:
+        filtered = filtered[filtered['User full name (first, last)'].isin(attorneys)]
+    if practices:
+        filtered = filtered[filtered['Practice area'].isin(practices)]
+    if locations:
+        filtered = filtered[filtered['Matter location'].isin(locations)]
+    if statuses:
+        filtered = filtered[filtered['Matter status'].isin(statuses)]
+    if clients:
+        filtered = filtered[filtered['Company name'].isin(clients)]
     
-    return filtered_df
-
-# Load data
-df = load_data()
-
-# Display data info for debugging
-st.sidebar.write("Debug Info:")
-st.sidebar.write("Available columns:", df.columns.tolist())
-
-# Load data
-df = load_data()
-
-# Sidebar filters
-st.sidebar.header('Filters')
-
-# Time filters
-st.sidebar.subheader('Time Filters')
-date_filter_type = st.sidebar.radio(
-    "Select Date Filter Type",
-    ["Month/Quarter", "Custom Date Range"]
-)
-
-# Initialize filter variables
-selected_months = None
-selected_quarters = None
-start_date = None
-end_date = None
-filter_level = None
-
-if df.empty:
-    st.error("No data available. Please check the data loading process.")
-else:
-    if date_filter_type == "Month/Quarter":
-        filter_level = st.sidebar.radio(
-            "Filter by",
-            ["Month", "Quarter"]
-        )
-        
-        if filter_level == "Month":
-            try:
-                months = sorted(df['Activity month'].astype(int).unique())
-                selected_months = st.sidebar.multiselect(
-                    'Select Months',
-                    options=months,
-                    default=[months[0]] if len(months) > 0 else []
-                )
-            except Exception as e:
-                st.error(f"Error loading months: {str(e)}")
-        else:
-            try:
-                quarters = sorted(df['Activity quarter'].astype(int).unique())
-                selected_quarters = st.sidebar.multiselect(
-                    'Select Quarters',
-                    options=quarters,
-                    default=[quarters[0]] if len(quarters) > 0 else []
-                )
-            except Exception as e:
-                st.error(f"Error loading quarters: {str(e)}")
-    else:
-        try:
-            min_date = df['Activity date'].min()
-            max_date = df['Activity date'].max()
-            start_date = st.sidebar.date_input('Start Date', min_date)
-            end_date = st.sidebar.date_input('End Date', max_date)
-        except Exception as e:
-            st.error(f"Error setting up date range: {str(e)}")
-
-# Other filters with error handling
-try:
-    selected_attorney = st.sidebar.multiselect(
-        'Attorneys',
-        options=sorted(df['User full name (first, last)'].dropna().unique())
-    )
-
-    selected_practice = st.sidebar.multiselect(
-        'Practice Areas',
-        options=sorted(df['Practice area'].dropna().unique())
-    )
-
-    selected_location = st.sidebar.multiselect(
-        'Matter Locations',
-        options=sorted(df['Matter location'].dropna().unique())
-    )
-
-    selected_status = st.sidebar.multiselect(
-        'Matter Status',
-        options=sorted(df['Matter status'].dropna().unique())
-    )
-
-    selected_client = st.sidebar.multiselect(
-        'Clients',
-        options=sorted(df['Company name'].dropna().unique())
-    )
-except Exception as e:
-    st.error(f"Error setting up filters: {str(e)}")
-
-def filter_data(df):
-    filtered_df = df.copy()
-    
-    # Date filtering
-    if date_filter_type == "Month/Quarter":
-        if filter_level == "Month" and selected_months:
-            filtered_df = filtered_df[filtered_df['Activity month'].isin(selected_months)]
-        elif filter_level == "Quarter" and selected_quarters:
-            filtered_df = filtered_df[filtered_df['Activity quarter'].isin(selected_quarters)]
-    else:
-        if start_date and end_date:
-            filtered_df = filtered_df[
-                (filtered_df['Activity date'].dt.date >= start_date) & 
-                (filtered_df['Activity date'].dt.date <= end_date)
-            ]
-    
-    # Other filters
-    if selected_attorney:
-        filtered_df = filtered_df[filtered_df['User full name (first, last)'].isin(selected_attorney)]
-    if selected_practice:
-        filtered_df = filtered_df[filtered_df['Practice area'].isin(selected_practice)]
-    if selected_location:
-        filtered_df = filtered_df[filtered_df['Matter location'].isin(selected_location)]
-    if selected_status:
-        filtered_df = filtered_df[filtered_df['Matter status'].isin(selected_status)]
-    if selected_client:
-        filtered_df = filtered_df[filtered_df['Company name'].isin(selected_client)]
-    
-    return filtered_df
+    return filtered
 
 # Apply filters
 filtered_df = filter_data(df)
@@ -321,12 +204,13 @@ with tab1:
         st.plotly_chart(fig, use_container_width=True)
 
     with col2:
-        # Monthly trend using Period instead of Activity date
-        monthly_hours = filtered_df.groupby('Period').agg({
+        # Monthly trend using month and year
+        monthly_data = filtered_df.groupby(['Year', 'Activity month']).agg({
             'Billed hours': 'sum'
         }).reset_index()
+        monthly_data['Period'] = monthly_data['Year'].astype(str) + '-' + monthly_data['Activity month'].astype(str).str.zfill(2)
         
-        fig = px.line(monthly_hours, x='Period', y='Billed hours',
+        fig = px.line(monthly_data, x='Period', y='Billed hours',
                      title='Monthly Billed Hours Trend')
         fig.update_layout(xaxis_tickangle=-45)
         st.plotly_chart(fig, use_container_width=True)
@@ -457,12 +341,14 @@ with tab4:
 with tab5:
     st.header('Trending Analysis')
     
-    # Time series analysis
-    time_metrics = filtered_df.groupby('Period').agg({
+    # Time series analysis by year and month
+    time_metrics = filtered_df.groupby(['Year', 'Activity month']).agg({
         'Billed hours': 'sum',
         'Billed hours value': 'sum',
         'Utilization rate': 'mean'
     }).reset_index()
+    
+    time_metrics['Period'] = time_metrics['Year'].astype(str) + '-' + time_metrics['Activity month'].astype(str).str.zfill(2)
     
     # Multiple metrics over time
     fig = go.Figure()
