@@ -1,17 +1,24 @@
 import streamlit as st
-import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
-import calendar
-from datetime import datetime
-
-# Set page config
+# Set page config MUST be the first Streamlit command
 st.set_page_config(
     page_title="Scale LLP Analytics Dashboard",
     page_icon="⚖️",
     layout="wide",
     initial_sidebar_state="expanded"
 )
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+import calendar
+from datetime import datetime
+
+# In your main content, replace the title with:
+col1, col2 = st.columns([0.1, 0.9])
+with col1:
+    st.image("logo.png", width=50)
+with col2:
+    st.title("Scale LLP Analytics Dashboard")
+
 
 # Initialize session state for filters
 if 'filters' not in st.session_state:
