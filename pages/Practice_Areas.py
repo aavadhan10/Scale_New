@@ -16,8 +16,13 @@ st.set_page_config(page_title="Practice Areas - Scale LLP Dashboard", layout="wi
 
 # Load data and create filters
 df = load_data()
-create_sidebar_filters()
+create_sidebar_filters(df)  # Pass df here
 filtered_df = apply_filters(df)
+
+# Add date range note
+if st.session_state.filters['start_date'] and st.session_state.filters['end_date']:
+    st.markdown(f"*Showing data from {st.session_state.filters['start_date'].strftime('%B %d, %Y')} to {st.session_state.filters['end_date'].strftime('%B %d, %Y')}*")
+
 
 # Page Header
 st.title("Practice Areas Analysis")
