@@ -4,41 +4,26 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
 import calendar
+import sys
+import os
+
+# Import functions from Home.py
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from Home import load_data, apply_filters, create_sidebar_filters
 
 # Page config
 st.set_page_config(page_title="Practice Areas - Scale LLP Dashboard", layout="wide")
 
-# Load data function
-def load_data():
-    df = pd.read_csv("Test_Full_Year.csv")
-    
-    numeric_columns = [
-        'Activity Year', 'Activity month', 'Activity quarter',
-        'Non-billable hours', 'Non-billable hours value',
-        'Billed & Unbilled hours', 'Billed & Unbilled hours value',
-        'Unbilled hours', 'Unbilled hours value',
-        'Billed hours', 'Billed hours value',
-        'Utilization rate', 'Tracked hours',
-        'User rate'
-    ]
-    
-    for col in numeric_columns:
-        if col in df.columns:
-            df[col] = df[col].replace('', pd.NA)
-            df[col] = pd.to_numeric(df[col], errors='coerce')
-    
-    df['Activity Year'] = df['Activity Year'].astype(str).str.replace(',', '').astype(float)
-    return df
-
-# Load and filter data
+# Load data and create filters
 df = load_data()
-filtered_df = df  # Apply your filtering logic here
+create_sidebar_filters()
+filtered_df = apply_filters(df)
 
 # Page Header
 st.title("Practice Areas Analysis")
 st.markdown(f"*Last refreshed: Wednesday Feb 19, 2025*")
 
-# Practice Area Overview Metrics
+# Key Practice Area Metrics
 st.markdown("### Key Practice Area Metrics")
 col1, col2, col3, col4 = st.columns(4)
 
@@ -121,7 +106,7 @@ with col2:
 # Practice Area Utilization Analysis
 st.markdown("### Practice Area Utilization")
 
-# Create utilization heatmap
+# Create utilization heatmap by month
 practice_util = filtered_df.pivot_table(
     values='Utilization rate',
     index='Practice area',
@@ -141,9 +126,10 @@ fig_heatmap = px.imshow(
 )
 st.plotly_chart(fig_heatmap, use_container_width=True)
 
-# Practice Area Trends
+# Practice Area Revenue Trends
 st.markdown("### Practice Area Revenue Trends")
-# Get top 5 practice areas for trend analysis
+
+# Get top 5 practice areas
 top_5_practices = filtered_df.groupby('Practice area')['Billed hours value'].sum().nlargest(5).index
 
 practice_trends = filtered_df[
@@ -153,8 +139,8 @@ practice_trends = filtered_df[
 }).reset_index()
 
 practice_trends['Date'] = pd.to_datetime(
-    practice_trends['Activity Year'].astype(str) + '-' + 
-    practice_trends['Activity month'].astype(str) + '-01'
+    practice_trends['Activity Year'].astype(int).astype(str) + '-' + 
+    practice_trends['Activity month'].astype(int).astype(str).str.zfill(2) + '-01'
 )
 
 fig_trends = px.line(
@@ -172,37 +158,42 @@ fig_trends.update_layout(
 )
 st.plotly_chart(fig_trends, use_container_width=True)
 
-# Attorney Distribution
+# Attorney Distribution in Practice Areas
 st.markdown("### Attorney Distribution by Practice Area")
-attorney_practice = filtered_df.groupby(['Practice area', 'User full name (first, last)', 'Attorney level']).agg({
-    'Billed hours': 'sum'
-}).reset_index()
-
-fig_distribution = px.sunburst(
-    attorney_practice,
-    path=['Practice area', 'Attorney level', 'User full name (first, last)'],
-    values='Billed hours',
-    title='Attorney Distribution Across Practice Areas'
-)
-st.plotly_chart(fig_distribution, use_container_width=True)
-
-# Matter Analysis
-st.markdown("### Matter Analysis by Practice Area")
 col1, col2 = st.columns(2)
 
 with col1:
-    # Matters per Practice Area
-    matters_per_practice = filtered_df.groupby('Practice area')['Matter number'].nunique().sort_values(ascending=True)
+    # Number of Attorneys per Practice Area
+    attorneys_per_practice = filtered_df.groupby('Practice area')['User full name (first, last)'].nunique().sort_values(ascending=True)
     
-    fig_matters = px.bar(
-        matters_per_practice,
+    fig_attorneys = px.bar(
+        attorneys_per_practice,
         orientation='h',
-        title='Number of Matters by Practice Area'
+        title='Number of Attorneys by Practice Area'
     )
-    fig_matters.update_layout(yaxis_title="Practice Area", xaxis_title="Number of Matters")
-    st.plotly_chart(fig_matters, use_container_width=True)
+    fig_attorneys.update_layout(yaxis_title="Practice Area", xaxis_title="Number of Attorneys")
+    st.plotly_chart(fig_attorneys, use_container_width=True)
 
 with col2:
+    # Attorney Levels by Practice Area
+    attorney_levels = filtered_df.groupby(['Practice area', 'Attorney level']).size().reset_index(name='count')
+    
+    fig_levels = px.bar(
+        attorney_levels,
+        x='Practice area',
+        y='count',
+        color='Attorney level',
+        title='Attorney Level Distribution by Practice Area',
+        barmode='stack'
+    )
+    fig_levels.update_layout(xaxis_tickangle=-45)
+    st.plotly_chart(fig_levels, use_container_width=True)
+
+# Practice Area Efficiency Analysis
+st.markdown("### Practice Area Efficiency")
+col1, col2 = st.columns(2)
+
+with col1:
     # Average Rate by Practice Area
     avg_rate_by_practice = (
         filtered_df.groupby('Practice area').agg({
@@ -222,6 +213,18 @@ with col2:
     )
     fig_rates.update_layout(yaxis_title="Practice Area", xaxis_title="Average Rate ($)")
     st.plotly_chart(fig_rates, use_container_width=True)
+
+with col2:
+    # Utilization Rate by Practice Area
+    util_by_practice = filtered_df.groupby('Practice area')['Utilization rate'].mean().sort_values(ascending=True)
+    
+    fig_util = px.bar(
+        util_by_practice,
+        orientation='h',
+        title='Average Utilization Rate by Practice Area'
+    )
+    fig_util.update_layout(yaxis_title="Practice Area", xaxis_title="Utilization Rate (%)")
+    st.plotly_chart(fig_util, use_container_width=True)
 
 # Detailed Practice Area Metrics Table
 st.markdown("### Detailed Practice Area Metrics")
@@ -266,7 +269,7 @@ st.download_button(
     key='download-practice-metrics'
 )
 
-# Custom CSS for styling
+# Add styling
 st.markdown("""
 <style>
     .metric-card {
