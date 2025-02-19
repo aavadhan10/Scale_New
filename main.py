@@ -49,18 +49,71 @@ st.sidebar.header('Filters')
 def get_clean_options(df, column):
     return sorted(list(df[column].dropna().unique()))
 
-# Time filters
-current_year = datetime.now().year
-selected_year = st.sidebar.selectbox('Year', range(current_year-5, current_year+1))
-selected_quarter = st.sidebar.selectbox('Quarter', [f'Q{i}' for i in range(1, 5)])
-selected_month = st.sidebar.selectbox('Month', list(calendar.month_name)[1:])
+# Time filters in sidebar
+st.sidebar.header('Time Filters')
 
-# Common filters
-selected_attorney = st.sidebar.multiselect('Attorneys', options=get_clean_options(df, 'User full name (first, last)'))
-selected_practice = st.sidebar.multiselect('Practice Areas', options=get_clean_options(df, 'Practice area'))
-selected_location = st.sidebar.multiselect('Matter Locations', options=get_clean_options(df, 'Matter location'))
-selected_status = st.sidebar.multiselect('Matter Status', options=get_clean_options(df, 'Matter status'))
-selected_client = st.sidebar.multiselect('Clients', options=get_clean_options(df, 'Company name'))
+# Date range selector
+date_filter_type = st.sidebar.radio(
+    "Select Date Filter Type",
+    ["Year-Month", "Custom Date Range"]
+)
+
+if date_filter_type == "Year-Month":
+    # Get unique years and months from the data
+    years = sorted(filtered_df['Activity date'].dt.year.unique())
+    
+    selected_years = st.sidebar.multiselect(
+        'Select Years',
+        options=years,
+        default=years[-1:]  # Default to latest year
+    )
+    
+    # Only show months if years are selected
+    if selected_years:
+        months = range(1, 13)
+        selected_months = st.sidebar.multiselect(
+            'Select Months',
+            options=months,
+            default=list(months),  # Default to all months
+            format_func=lambda x: calendar.month_name[x]
+        )
+else:
+    # Custom date range
+    min_date = filtered_df['Activity date'].min()
+    max_date = filtered_df['Activity date'].max()
+    
+    start_date = st.sidebar.date_input('Start Date', min_date, min_value=min_date, max_value=max_date)
+    end_date = st.sidebar.date_input('End Date', max_date, min_value=min_date, max_value=max_date)
+
+# Update filter_data function
+def filter_data(df):
+    filtered_df = df.copy()
+    
+    # Apply date filters
+    if date_filter_type == "Year-Month":
+        if selected_years:
+            filtered_df = filtered_df[filtered_df['Activity date'].dt.year.isin(selected_years)]
+        if selected_months:
+            filtered_df = filtered_df[filtered_df['Activity date'].dt.month.isin(selected_months)]
+    else:
+        filtered_df = filtered_df[
+            (filtered_df['Activity date'].dt.date >= start_date) &
+            (filtered_df['Activity date'].dt.date <= end_date)
+        ]
+    
+    # Apply other filters
+    if selected_attorney:
+        filtered_df = filtered_df[filtered_df['User full name (first, last)'].isin(selected_attorney)]
+    if selected_practice:
+        filtered_df = filtered_df[filtered_df['Practice area'].isin(selected_practice)]
+    if selected_location:
+        filtered_df = filtered_df[filtered_df['Matter location'].isin(selected_location)]
+    if selected_status:
+        filtered_df = filtered_df[filtered_df['Matter status'].isin(selected_status)]
+    if selected_client:
+        filtered_df = filtered_df[filtered_df['Company name'].isin(selected_client)]
+        
+    return filtered_df
 
 # Apply filters
 def filter_data(df):
@@ -181,11 +234,24 @@ with tab2:
         st.plotly_chart(fig, use_container_width=True)
     
     with col2:
-        fig = px.treemap(filtered_df, 
-                        path=['Practice area', 'Company name'], 
-                        values='Billed hours',
-                        title='Client Distribution by Practice Area')
-        st.plotly_chart(fig, use_container_width=True)
+        # Prepare data for treemap by removing NaN values
+        treemap_df = filtered_df.copy()
+        treemap_df = treemap_df.dropna(subset=['Practice area', 'Company name'])
+        
+        # Aggregate the data
+        client_practice = treemap_df.groupby(['Practice area', 'Company name'])['Billed hours'].sum().reset_index()
+        
+        # Only create treemap if we have data
+        if not client_practice.empty:
+            fig = px.treemap(
+                client_practice,
+                path=['Practice area', 'Company name'],
+                values='Billed hours',
+                title='Client Distribution by Practice Area'
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.warning("No data available for treemap visualization")
     
     # Client metrics table
     st.subheader('Client Metrics')
