@@ -20,7 +20,7 @@ def load_data():
     
     # Convert numeric columns
     numeric_columns = [
-        'Activity Year', 'Activity month', 'Activity quarter', 'Activity day',
+        'Activity quarter',
         'Non-billable hours', 'Non-billable hours value',
         'Billed & Unbilled hours', 'Billed & Unbilled hours value',
         'Unbilled hours', 'Unbilled hours value',
@@ -34,11 +34,8 @@ def load_data():
             df[col] = df[col].replace('', pd.NA)
             df[col] = pd.to_numeric(df[col], errors='coerce')
     
-    df['Activity Year'] = df['Activity Year'].astype(str).str.replace(',', '').astype(float)
-    
-    # Convert Activity date to datetime if it exists
-    if 'Activity date' in df.columns:
-        df['Activity date'] = pd.to_datetime(df['Activity date'])
+    # Convert Activity date to datetime
+    df['Activity date'] = pd.to_datetime(df['Activity date'])
     
     # Attorney levels mapping
     attorney_levels = {
@@ -155,10 +152,8 @@ def load_data():
 # Initialize session state for filters
 if 'filters' not in st.session_state:
     st.session_state.filters = {
-        'years': [],
-        'months': [],
+        'date_range': [],
         'quarters': [],
-        'days': [],  # Added days filter
         'attorney_levels': [],
         'attorneys': [],
         'practices': [],
@@ -177,36 +172,31 @@ def create_sidebar_filters():
     # Time period filters
     st.sidebar.subheader('Time Period Filters')
     
-    # Year filter
-    years = sorted(df['Activity Year'].dropna().unique().astype(int).tolist())
-    st.session_state.filters['years'] = st.sidebar.multiselect(
-        'Select Years',
-        options=years,
-        default=[years[-1]] if years else []
+    # Date Range filter
+    min_date = df['Activity date'].min()
+    max_date = df['Activity date'].max()
+    
+    start_date = st.sidebar.date_input(
+        "Start Date",
+        min_date,
+        min_value=min_date,
+        max_value=max_date
     )
     
-    # Month filter
-    months = sorted(df['Activity month'].dropna().unique().astype(int).tolist())
-    month_names = [calendar.month_name[m] for m in months if 1 <= m <= 12]
-    st.session_state.filters['months'] = st.sidebar.multiselect(
-        'Select Months',
-        options=month_names,
-        default=[]
+    end_date = st.sidebar.date_input(
+        "End Date",
+        max_date,
+        min_value=min_date,
+        max_value=max_date
     )
+    
+    st.session_state.filters['date_range'] = [start_date, end_date]
     
     # Quarter filter
     quarters = sorted(df['Activity quarter'].dropna().unique().astype(int).tolist())
     st.session_state.filters['quarters'] = st.sidebar.multiselect(
         'Select Quarters',
         options=[f'Q{q}' for q in quarters],
-        default=[]
-    )
-    
-    # Day filter
-    days = sorted(df['Activity day'].dropna().unique().astype(int).tolist())
-    st.session_state.filters['days'] = st.sidebar.multiselect(
-        'Select Days',
-        options=days,
         default=[]
     )
     
@@ -259,19 +249,17 @@ def create_sidebar_filters():
 def apply_filters(df):
     filtered = df.copy()
     
-    if st.session_state.filters['years']:
-        filtered = filtered[filtered['Activity Year'].isin(st.session_state.filters['years'])]
-    
-    if st.session_state.filters['months']:
-        selected_month_numbers = [list(calendar.month_name).index(month) for month in st.session_state.filters['months']]
-        filtered = filtered[filtered['Activity month'].isin(selected_month_numbers)]
+    # Apply date range filter
+    if st.session_state.filters['date_range']:
+        start_date, end_date = st.session_state.filters['date_range']
+        filtered = filtered[
+            (filtered['Activity date'].dt.date >= start_date) &
+            (filtered['Activity date'].dt.date <= end_date)
+        ]
     
     if st.session_state.filters['quarters']:
         selected_quarter_numbers = [int(q[1]) for q in st.session_state.filters['quarters']]
         filtered = filtered[filtered['Activity quarter'].isin(selected_quarter_numbers)]
-    
-    if st.session_state.filters['days']:
-        filtered = filtered[filtered['Activity day'].isin(st.session_state.filters['days'])]
     
     if st.session_state.filters['attorney_levels']:
         filtered = filtered[filtered['Attorney level'].isin(st.session_state.filters['attorney_levels'])]
