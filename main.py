@@ -15,19 +15,35 @@ def load_data():
         # Read the CSV file
         df = pd.read_csv("Test_Full_Year.csv")
         
-        # Convert date columns to datetime with proper error handling
+        # Convert date columns to datetime
         date_columns = ['Activity date', 'Matter open date', 'Matter pending date', 'Matter close date']
-        
         for col in date_columns:
             if col in df.columns:
-                # Convert to datetime using a specific format
                 df[col] = pd.to_datetime(df[col], format='%m/%d/%Y', errors='coerce')
-                
-                # Only show warning for Activity date since other dates can be legitimately empty
-                if col == 'Activity date':
-                    missing_dates = df[col].isna().sum()
-                    if missing_dates > 0:
-                        st.warning(f"{missing_dates} dates in {col} could not be parsed and were set to NaT")
+        
+        # Convert numeric columns to float
+        numeric_columns = [
+            'Billed & Unbilled hours',
+            'Billed hours',
+            'Unbilled hours',
+            'Non-billable hours',
+            'Billed hours value',
+            'Utilization rate'
+        ]
+        
+        for col in numeric_columns:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
+        
+        # Remove rows with invalid Activity date
+        if 'Activity date' in df.columns:
+            df = df.dropna(subset=['Activity date'])
+        
+        return df
+    
+    except Exception as e:
+        st.error(f"Error loading data: {str(e)}")
+        return pd.DataFrame()
         
         # Remove any rows where Activity date is NaT (if Activity date is crucial)
         if 'Activity date' in df.columns:
@@ -140,19 +156,21 @@ st.header('Key Performance Metrics')
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    total_billable_hours = filtered_df['Billed & Unbilled hours'].sum()
+    total_billable_hours = float(filtered_df['Billed & Unbilled hours'].sum())
     st.metric("Total Billable Hours", f"{total_billable_hours:,.1f}")
 
 with col2:
-    total_billed_hours = filtered_df['Billed hours'].sum()
+    total_billed_hours = float(filtered_df['Billed hours'].sum())
     st.metric("Billed Hours", f"{total_billed_hours:,.1f}")
 
 with col3:
-    avg_utilization = filtered_df['Utilization rate'].mean()
+    avg_utilization = float(filtered_df['Utilization rate'].mean())
     st.metric("Utilization Rate", f"{avg_utilization:.1f}%")
 
 with col4:
-    avg_rate = (filtered_df['Billed hours value'].sum() / filtered_df['Billed hours'].sum()) if filtered_df['Billed hours'].sum() > 0 else 0
+    total_billed_value = float(filtered_df['Billed hours value'].sum())
+    total_billed_hours = float(filtered_df['Billed hours'].sum())
+    avg_rate = total_billed_value / total_billed_hours if total_billed_hours > 0 else 0.0
     st.metric("Average Rate", f"${avg_rate:.2f}/hr")
 
 # Hourly Distribution
