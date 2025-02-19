@@ -146,11 +146,9 @@ def filter_data(df):
         elif filter_level == "Quarter" and selected_quarters:
             filtered_df = filtered_df[filtered_df['Activity quarter'].isin(selected_quarters)]
     else:
-        # Convert dates to datetime for comparison
-        filtered_df['Activity date'] = pd.to_datetime(filtered_df['Activity date'])
         filtered_df = filtered_df[
-            (filtered_df['Activity date'].dt.date >= start_date) &
-            (filtered_df['Activity date'].dt.date <= end_date)
+            (pd.to_datetime(filtered_df['Activity date']).dt.date >= start_date) &
+            (pd.to_datetime(filtered_df['Activity date']).dt.date <= end_date)
         ]
     
     # Apply other filters
