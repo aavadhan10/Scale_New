@@ -13,12 +13,16 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from Home import load_data, apply_filters, create_sidebar_filters
 
 # Page config
-st.set_page_config(page_title="Trending Analysis - Scale LLP Dashboard", layout="wide")
+st.set_page_config(page_title="Trending - Scale LLP Dashboard", layout="wide")
 
 # Load data and create filters
 df = load_data()
-create_sidebar_filters()
+create_sidebar_filters(df)  # Pass df here
 filtered_df = apply_filters(df)
+
+# Add date range note
+if st.session_state.filters['start_date'] and st.session_state.filters['end_date']:
+    st.markdown(f"*Showing data from {st.session_state.filters['start_date'].strftime('%B %d, %Y')} to {st.session_state.filters['end_date'].strftime('%B %d, %Y')}*")
 
 # Page Header
 st.title("Trending Analysis")
