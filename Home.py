@@ -12,14 +12,12 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
-# Set page config
-st.set_page_config(
-    page_title="Scale LLP Analytics Dashboard",
-    page_icon="⚖️",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# Add logo and title in the main content
+col1, col2 = st.columns([0.1, 0.9])
+with col1:
+    st.image("assets/images/logo.png", width=50)
+with col2:
+    st.title("Scale LLP Analytics Dashboard")
 
 # Initialize session state for filters
 if 'filters' not in st.session_state:
