@@ -326,6 +326,7 @@ with tab3:
     attorney_metrics = attorney_metrics.reset_index()
     attorney_metrics.columns = ['Attorney', 'Total Billed Hours', 'Total Revenue', 'Utilization Rate', 'Hourly Rate']
     st.dataframe(attorney_metrics.sort_values('Total Revenue', ascending=False))
+
     # Tab 4: Practice Areas
 with tab4:
     st.header('Practice Area Analysis')
@@ -416,4 +417,5 @@ st.markdown("""
 
 # Add error handling for empty DataFrame
 if df.empty:
-    st.error("No data found in the CSV file. Please check the file and try again."
+    st.error("No data found in the CSV file. Please check the file and try again.")
+  
