@@ -127,31 +127,34 @@ st.markdown("### Client Revenue Trends")
 # Get top 5 clients for trend analysis
 top_5_clients = filtered_df.groupby('Company name')['Billed hours value'].sum().nlargest(5).index
 
-# Prepare trend data
-client_trends = filtered_df[filtered_df['Company name'].isin(top_5_clients)].groupby(
-    ['Activity date', 'Company name']
-).agg({
-    'Billed hours value': 'sum'
-}).reset_index()
+try:
+    # Prepare trend data
+    client_trends = filtered_df[filtered_df['Company name'].isin(top_5_clients)].groupby(
+        ['Activity date', 'Company name']
+    ).agg({
+        'Billed hours value': 'sum'
+    }).reset_index()
 
-# Sort by date
-client_trends = client_trends.sort_values('Activity date')
+    # Sort by date
+    client_trends = client_trends.sort_values('Activity date')
 
-fig_trends = px.line(
-    client_trends,
-    x='Activity date',
-    y='Billed hours value',
-    color='Company name',
-    title='Revenue Trends - Top 5 Clients',
-    markers=True
-)
-fig_trends.update_layout(
-    xaxis_title="Date",
-    yaxis_title="Revenue ($)",
-    hovermode='x unified'
-)
-st.plotly_chart(fig_trends, use_container_width=True)
-
+    fig_trends = px.line(
+        client_trends,
+        x='Activity date',
+        y='Billed hours value',
+        color='Company name',
+        title='Revenue Trends - Top 5 Clients',
+        markers=True
+    )
+    fig_trends.update_layout(
+        xaxis_title="Date",
+        yaxis_title="Revenue ($)",
+        hovermode='x unified'
+    )
+    st.plotly_chart(fig_trends, use_container_width=True)
+except Exception as e:
+    st.warning(f"Unable to display trend chart: {e}")
+    
 # Client Matter Analysis
 st.markdown("### Client Matter Analysis")
 col1, col2 = st.columns(2)
