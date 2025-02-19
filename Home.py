@@ -13,6 +13,14 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Set page config
+st.set_page_config(
+    page_title="Scale LLP Analytics Dashboard",
+    page_icon="⚖️",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
 # Initialize session state for filters
 if 'filters' not in st.session_state:
     st.session_state.filters = {
