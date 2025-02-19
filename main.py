@@ -13,8 +13,26 @@ st.set_page_config(page_title="Law Firm Analytics Dashboard", layout="wide")
 def load_data():
     try:
         df = pd.read_csv("Test_Full_Year.csv")
+        
+        # Ensure date columns are properly parsed
+        date_columns = ['Activity date', 'Matter open date', 'Matter pending date', 'Matter close date']
+        for col in date_columns:
+            if col in df.columns:
+                df[col] = pd.to_datetime(df[col], errors='coerce')
+        
+        # Add derived columns if not present
+        if 'Activity Year' not in df.columns and 'Activity date' in df.columns:
+            df['Activity Year'] = df['Activity date'].dt.year
+        
+        if 'Activity month' not in df.columns and 'Activity date' in df.columns:
+            df['Activity month'] = df['Activity date'].dt.month
+        
+        if 'Activity quarter' not in df.columns and 'Activity date' in df.columns:
+            df['Activity quarter'] = df['Activity date'].dt.quarter
+        
         return df
     except Exception as e:
+        st.error(f"Error loading data: {e}")
         return pd.DataFrame()
 
 # Load data
@@ -26,26 +44,26 @@ df.columns = df.columns.str.replace('*', '').str.replace('"', '').str.strip()
 # Sidebar filters
 st.sidebar.header('Filters')
 
-# Initialize filter variables
-selected_years = []
-month_selection = []
-quarter_selection = []
-start_month = None
-end_month = None
-attorneys = []
-practices = []
-locations = []
-statuses = []
-clients = []
+# Safely get unique values with default
+def get_unique_values(df, column, default_first=True):
+    try:
+        values = sorted(df[column].dropna().unique())
+        return values if values else []
+    except Exception:
+        return []
 
 # Year filter
-years = sorted(df['Activity Year'].unique())
+years = get_unique_values(df, 'Activity Year')
 selected_years = st.sidebar.multiselect(
     'Select Years',
     options=years,
-    default=[years[0]] if len(years) > 0 else [],
+    default=[years[0]] if years else [],
     key="year_select"
 )
+
+# Safely get months
+months = get_unique_values(df, 'Activity month')
+month_names = [calendar.month_name[int(m)] for m in months]
 
 # Time filters
 filter_section = st.sidebar.radio(
@@ -53,6 +71,11 @@ filter_section = st.sidebar.radio(
     ["Month/Quarter", "Custom Range"],
     key="time_filter_type"
 )
+
+month_selection = []
+quarter_selection = []
+start_month = None
+end_month = None
 
 if filter_section == "Month/Quarter":
     level = st.sidebar.radio(
@@ -62,25 +85,25 @@ if filter_section == "Month/Quarter":
     )
     
     if level == "Month":
-        months = sorted(df['Activity month'].unique())
+        # Convert months to month names for display
         month_selection = st.sidebar.multiselect(
             'Select Months',
             options=months,
-            default=[months[0]] if len(months) > 0 else [],
+            default=[months[0]] if months else [],
             format_func=lambda x: calendar.month_name[int(x)],
             key="month_select"
         )
     else:
-        quarters = sorted(df['Activity quarter'].unique())
+        quarters = get_unique_values(df, 'Activity quarter')
         quarter_selection = st.sidebar.multiselect(
             'Select Quarters',
             options=quarters,
-            default=[quarters[0]] if len(quarters) > 0 else [],
+            default=[quarters[0]] if quarters else [],
             format_func=lambda x: f'Q{int(x)}',
             key="quarter_select"
         )
 else:
-    months = sorted(df['Activity month'].unique())
+    # Custom Range
     start_month = st.sidebar.selectbox(
         'Start Month', 
         options=months, 
@@ -91,38 +114,38 @@ else:
         'End Month',
         options=months,
         format_func=lambda x: calendar.month_name[int(x)],
-        index=len(months)-1,
+        index=len(months)-1 if months else 0,
         key="end_month"
     )
 
-# Other filters
+# Other filters with safe value extraction
 attorneys = st.sidebar.multiselect(
     'Attorneys',
-    options=sorted(df['User full name (first, last)'].dropna().unique()),
+    options=get_unique_values(df, 'User full name (first, last)'),
     key="attorneys"
 )
 
 practices = st.sidebar.multiselect(
     'Practice Areas',
-    options=sorted(df['Practice area'].dropna().unique()),
+    options=get_unique_values(df, 'Practice area'),
     key="practices"
 )
 
 locations = st.sidebar.multiselect(
     'Matter Locations',
-    options=sorted(df['Matter location'].dropna().unique()),
+    options=get_unique_values(df, 'Matter location'),
     key="locations"
 )
 
 statuses = st.sidebar.multiselect(
     'Matter Status',
-    options=sorted(df['Matter status'].dropna().unique()),
+    options=get_unique_values(df, 'Matter status'),
     key="statuses"
 )
 
 clients = st.sidebar.multiselect(
     'Clients',
-    options=sorted(df['Company name'].dropna().unique()),
+    options=get_unique_values(df, 'Company name'),
     key="clients"
 )
 
@@ -136,14 +159,16 @@ def filter_data(df):
     # Apply month/quarter filters
     if filter_section == "Month/Quarter":
         if level == "Month" and month_selection:
-            filtered = filtered[filtered['Activity month'].isin(month_selection)]
+            filtered = filtered[filtered['Activity month'].isin([months[month_names.index(m)] for m in month_selection])]
         elif level == "Quarter" and quarter_selection:
             filtered = filtered[filtered['Activity quarter'].isin(quarter_selection)]
     else:
         if start_month is not None and end_month is not None:
+            start_idx = months.index(start_month)
+            end_idx = months.index(end_month)
             filtered = filtered[
-                (filtered['Activity month'] >= start_month) & 
-                (filtered['Activity month'] <= end_month)
+                (filtered['Activity month'] >= months[start_idx]) & 
+                (filtered['Activity month'] <= months[end_idx])
             ]
     
     # Apply other filters
@@ -301,8 +326,7 @@ with tab3:
     attorney_metrics = attorney_metrics.reset_index()
     attorney_metrics.columns = ['Attorney', 'Total Billed Hours', 'Total Revenue', 'Utilization Rate', 'Hourly Rate']
     st.dataframe(attorney_metrics.sort_values('Total Revenue', ascending=False))
-
-# Tab 4: Practice Areas
+    # Tab 4: Practice Areas
 with tab4:
     st.header('Practice Area Analysis')
     
@@ -389,3 +413,7 @@ st.markdown("""
     }
     </style>
     """, unsafe_allow_html=True)
+
+# Add error handling for empty DataFrame
+if df.empty:
+    st.error("No data found in the CSV file. Please check the file and try again."
