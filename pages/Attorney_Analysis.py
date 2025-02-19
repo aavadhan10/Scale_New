@@ -4,41 +4,26 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
 import calendar
+import sys
+import os
+
+# Import functions from Home.py
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from Home import load_data, apply_filters, create_sidebar_filters
 
 # Page config
 st.set_page_config(page_title="Attorney Analysis - Scale LLP Dashboard", layout="wide")
 
-# Load data function
-def load_data():
-    df = pd.read_csv("Test_Full_Year.csv")
-    
-    numeric_columns = [
-        'Activity Year', 'Activity month', 'Activity quarter',
-        'Non-billable hours', 'Non-billable hours value',
-        'Billed & Unbilled hours', 'Billed & Unbilled hours value',
-        'Unbilled hours', 'Unbilled hours value',
-        'Billed hours', 'Billed hours value',
-        'Utilization rate', 'Tracked hours',
-        'User rate'
-    ]
-    
-    for col in numeric_columns:
-        if col in df.columns:
-            df[col] = df[col].replace('', pd.NA)
-            df[col] = pd.to_numeric(df[col], errors='coerce')
-    
-    df['Activity Year'] = df['Activity Year'].astype(str).str.replace(',', '').astype(float)
-    return df
-
-# Load and filter data
+# Load data and create filters
 df = load_data()
-filtered_df = df  # Apply your filtering logic here
+create_sidebar_filters()
+filtered_df = apply_filters(df)
 
 # Page Header
 st.title("Attorney Analysis")
 st.markdown(f"*Last refreshed: Wednesday Feb 19, 2025*")
 
-# Attorney Overview Metrics
+# Key Attorney Metrics
 st.markdown("### Key Attorney Metrics")
 col1, col2, col3, col4 = st.columns(4)
 
@@ -91,7 +76,8 @@ st.markdown("### Attorney Performance Matrix")
 attorney_metrics = filtered_df.groupby('User full name (first, last)').agg({
     'Billed hours': 'sum',
     'Utilization rate': 'mean',
-    'Billed hours value': 'sum'
+    'Billed hours value': 'sum',
+    'Attorney level': 'first'
 }).reset_index()
 
 fig_matrix = px.scatter(
@@ -99,12 +85,14 @@ fig_matrix = px.scatter(
     x='Billed hours',
     y='Utilization rate',
     size='Billed hours value',
+    color='Attorney level',
     hover_name='User full name (first, last)',
     title='Attorney Performance Matrix',
     labels={
         'Billed hours': 'Total Billed Hours',
         'Utilization rate': 'Utilization Rate (%)',
-        'Billed hours value': 'Revenue'
+        'Billed hours value': 'Revenue',
+        'Attorney level': 'Attorney Level'
     }
 )
 st.plotly_chart(fig_matrix, use_container_width=True)
@@ -141,51 +129,21 @@ with col2:
     )
     st.plotly_chart(fig_level_util, use_container_width=True)
 
-# Attorney Practice Area Distribution
+# Practice Area Distribution
 st.markdown("### Practice Area Distribution")
 attorney_practice = filtered_df.groupby(
-    ['User full name (first, last)', 'Practice area']
+    ['User full name (first, last)', 'Practice area', 'Attorney level']
 ).agg({
     'Billed hours': 'sum'
 }).reset_index()
 
 fig_practice = px.sunburst(
     attorney_practice,
-    path=['User full name (first, last)', 'Practice area'],
+    path=['Attorney level', 'User full name (first, last)', 'Practice area'],
     values='Billed hours',
     title='Attorney Distribution Across Practice Areas'
 )
 st.plotly_chart(fig_practice, use_container_width=True)
-
-# Top Performers
-st.markdown("### Top Performing Attorneys")
-col1, col2 = st.columns(2)
-
-with col1:
-    # Top 10 by Revenue
-    top_revenue = filtered_df.groupby('User full name (first, last)').agg({
-        'Billed hours value': 'sum'
-    }).sort_values('Billed hours value', ascending=True).tail(10)
-    
-    fig_top_revenue = px.bar(
-        top_revenue,
-        orientation='h',
-        title='Top 10 Attorneys by Revenue'
-    )
-    st.plotly_chart(fig_top_revenue, use_container_width=True)
-
-with col2:
-    # Top 10 by Utilization
-    top_util = filtered_df.groupby('User full name (first, last)').agg({
-        'Utilization rate': 'mean'
-    }).sort_values('Utilization rate', ascending=True).tail(10)
-    
-    fig_top_util = px.bar(
-        top_util,
-        orientation='h',
-        title='Top 10 Attorneys by Utilization Rate'
-    )
-    st.plotly_chart(fig_top_util, use_container_width=True)
 
 # Attorney Utilization Trends
 st.markdown("### Attorney Utilization Trends")
@@ -199,8 +157,8 @@ attorney_trends = filtered_df[
 }).reset_index()
 
 attorney_trends['Date'] = pd.to_datetime(
-    attorney_trends['Activity Year'].astype(str) + '-' + 
-    attorney_trends['Activity month'].astype(str) + '-01'
+    attorney_trends['Activity Year'].astype(int).astype(str) + '-' + 
+    attorney_trends['Activity month'].astype(int).astype(str).str.zfill(2) + '-01'
 )
 
 fig_trends = px.line(
@@ -217,6 +175,48 @@ fig_trends.update_layout(
     hovermode='x unified'
 )
 st.plotly_chart(fig_trends, use_container_width=True)
+
+# Performance Metrics by Attorney Level
+st.markdown("### Performance Metrics by Attorney Level")
+col1, col2 = st.columns(2)
+
+with col1:
+    level_hours = filtered_df.groupby(['Attorney level', 'Activity month']).agg({
+        'Billed hours': 'sum'
+    }).reset_index()
+    
+    level_hours['Date'] = pd.to_datetime(
+        '2024-' + level_hours['Activity month'].astype(str).str.zfill(2) + '-01'
+    )
+    
+    fig_level_hours = px.line(
+        level_hours,
+        x='Date',
+        y='Billed hours',
+        color='Attorney level',
+        title='Monthly Billed Hours by Attorney Level',
+        markers=True
+    )
+    st.plotly_chart(fig_level_hours, use_container_width=True)
+
+with col2:
+    level_revenue = filtered_df.groupby(['Attorney level', 'Activity month']).agg({
+        'Billed hours value': 'sum'
+    }).reset_index()
+    
+    level_revenue['Date'] = pd.to_datetime(
+        '2024-' + level_revenue['Activity month'].astype(str).str.zfill(2) + '-01'
+    )
+    
+    fig_level_revenue = px.line(
+        level_revenue,
+        x='Date',
+        y='Billed hours value',
+        color='Attorney level',
+        title='Monthly Revenue by Attorney Level',
+        markers=True
+    )
+    st.plotly_chart(fig_level_revenue, use_container_width=True)
 
 # Detailed Attorney Metrics Table
 st.markdown("### Detailed Attorney Metrics")
@@ -263,7 +263,7 @@ st.download_button(
     key='download-attorney-metrics'
 )
 
-# Custom CSS for styling
+# Add styling
 st.markdown("""
 <style>
     .metric-card {
