@@ -2,454 +2,497 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from datetime import datetime
 import calendar
-import sys
-import os
+from datetime import datetime
 
-# Import functions from Home.py
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from Home import load_data, apply_filters, create_sidebar_filters
+# Page configuration
+st.set_page_config(
+    page_title="Scale LLP Analytics Dashboard",
+    layout="wide"
+)
 
-# Page config
-st.set_page_config(page_title="Attorney Analysis - Scale LLP Dashboard", layout="wide")
-
-# Load data and create filters
-df = load_data()
-create_sidebar_filters(df)  # Pass df here
-filtered_df = apply_filters(df)
-
-# Add date range note
-if st.session_state.filters['start_date'] and st.session_state.filters['end_date']:
-    st.markdown(f"*Showing data from {st.session_state.filters['start_date'].strftime('%B %d, %Y')} to {st.session_state.filters['end_date'].strftime('%B %d, %Y')}*")
-
-# Page Header
-st.title("Attorney Analysis")
-st.markdown(f"*Last refreshed: Wednesday Feb 19, 2025*")
-
-# Key Attorney Metrics
-st.markdown("### Key Attorney Metrics")
-col1, col2, col3, col4 = st.columns(4)
-
+# Title section
+col1, col2 = st.columns([0.1, 0.9])
 with col1:
-    total_attorneys = filtered_df['User full name (first, last)'].nunique()
-    prev_attorneys = max(total_attorneys * 0.95, 1)  # Prevent zero division
-    delta = ((total_attorneys - prev_attorneys) / prev_attorneys) * 100 if prev_attorneys > 0 else 0
-    arrow = "↗️" if delta > 0 else "↘️"
-    st.metric(
-        "Total Attorneys",
-        f"{total_attorneys:,}",
-        f"{arrow} {delta:.1f}%"
-    )
-
+    st.image("logo.png", width=50)
 with col2:
-    avg_utilization = filtered_df['Utilization rate'].mean()
-    prev_util = max(avg_utilization * 0.95, 1)  # Prevent zero division
-    delta = ((avg_utilization - prev_util) / prev_util) * 100 if prev_util > 0 else 0
-    arrow = "↗️" if delta > 0 else "↘️"
-    st.metric(
-        "Average Utilization",
-        f"{avg_utilization:.1f}%",
-        f"{arrow} {delta:.1f}%"
-    )
+    st.title("Scale LLP Analytics Dashboard")
 
-with col3:
-    avg_revenue_per_attorney = filtered_df.groupby('User full name (first, last)')['Billed hours value'].sum().mean()
-    prev_revenue = max(avg_revenue_per_attorney * 0.95, 1)  # Prevent zero division
-    delta = ((avg_revenue_per_attorney - prev_revenue) / prev_revenue) * 100 if prev_revenue > 0 else 0
-    arrow = "↗️" if delta > 0 else "↘️"
-    st.metric(
-        "Avg Revenue per Attorney",
-        f"${avg_revenue_per_attorney:,.2f}",
-        f"{arrow} {delta:.1f}%"
-    )
-
-with col4:
-    avg_hours_per_attorney = filtered_df.groupby('User full name (first, last)')['Billed hours'].sum().mean()
-    prev_hours = max(avg_hours_per_attorney * 0.95, 1)  # Prevent zero division
-    delta = ((avg_hours_per_attorney - prev_hours) / prev_hours) * 100 if prev_hours > 0 else 0
-    arrow = "↗️" if delta > 0 else "↘️"
-    st.metric(
-        "Avg Hours per Attorney",
-        f"{avg_hours_per_attorney:.1f}",
-        f"{arrow} {delta:.1f}%"
-    )
-
-# Attorney Performance Matrix
-st.markdown("### Attorney Performance Matrix")
-attorney_metrics = filtered_df.groupby('User full name (first, last)').agg({
-    'Billed hours': 'sum',
-    'Utilization rate': 'mean',
-    'Billed hours value': 'sum',
-    'Attorney level': 'first'
-}).reset_index()
-
-# Handle any null or infinite values
-attorney_metrics = attorney_metrics.fillna(0)
-attorney_metrics = attorney_metrics.replace([float('inf'), float('-inf')], 0)
-
-fig_matrix = px.scatter(
-    attorney_metrics,
-    x='Billed hours',
-    y='Utilization rate',
-    size='Billed hours value',
-    color='Attorney level',
-    hover_name='User full name (first, last)',
-    title='Attorney Performance Matrix',
-    labels={
-        'Billed hours': 'Total Billed Hours',
-        'Utilization rate': 'Utilization Rate (%)',
-        'Billed hours value': 'Revenue',
-        'Attorney level': 'Attorney Level'
+# Initialize session state for filters
+if 'filters' not in st.session_state:
+    st.session_state.filters = {
+        'start_date': None,
+        'end_date': None,
+        'quarters': [],
+        'attorney_levels': [],
+        'attorneys': [],
+        'practices': [],
+        'locations': [],
+        'statuses': [],
+        'clients': []
     }
-)
-st.plotly_chart(fig_matrix, use_container_width=True)
 
-# Attorney Level Analysis
-st.markdown("### Analysis by Attorney Level")
-col1, col2 = st.columns(2)
-
-with col1:
-    # Revenue by Attorney Level
-    level_revenue = filtered_df.groupby('Attorney level').agg({
-        'Billed hours value': 'sum'
-    }).reset_index()
+# Load data function
+@st.cache_data
+def load_data():
+    # Read the CSV file
+    df = pd.read_csv("Test_Full_Year.csv")
     
-    fig_level_revenue = px.pie(
-        level_revenue,
-        values='Billed hours value',
-        names='Attorney level',
-        title='Revenue Distribution by Attorney Level'
-    )
-    st.plotly_chart(fig_level_revenue, use_container_width=True)
-
-with col2:
-    # Utilization by Attorney Level
-    level_util = filtered_df.groupby('Attorney level').agg({
-        'Utilization rate': 'mean'
-    }).reset_index()
-    
-    fig_level_util = px.bar(
-        level_util,
-        x='Attorney level',
-        y='Utilization rate',
-        title='Average Utilization Rate by Attorney Level'
-    )
-    st.plotly_chart(fig_level_util, use_container_width=True)
-
-# Attorney Utilization Trends
-st.markdown("### Attorney Utilization Trends")
-# Get top 5 attorneys by revenue for trend analysis
-top_5_attorneys = filtered_df.groupby('User full name (first, last)')['Billed hours value'].sum().nlargest(5).index
-
-attorney_trends = filtered_df[
-    filtered_df['User full name (first, last)'].isin(top_5_attorneys)
-].groupby(['Activity Year', 'Activity month', 'User full name (first, last)']).agg({
-    'Utilization rate': 'mean'
-}).reset_index()
-
-# Fix date handling
-attorney_trends['Date'] = pd.to_datetime(
-    attorney_trends['Activity Year'].astype(int).astype(str) + '-' + 
-    attorney_trends['Activity month'].astype(int).astype(str).str.zfill(2) + '-01'
-)
-
-fig_trends = px.line(
-    attorney_trends,
-    x='Date',
-    y='Utilization rate',
-    color='User full name (first, last)',
-    title='Utilization Rate Trends - Top 5 Attorneys',
-    markers=True
-)
-fig_trends.update_layout(
-    xaxis_title="Date",
-    yaxis_title="Utilization Rate (%)",
-    hovermode='x unified'
-)
-st.plotly_chart(fig_trends, use_container_width=True)
-
-# Client Relationships
-st.markdown("### Attorney-Client Relationships")
-col1, col2 = st.columns(2)
-
-with col1:
-    # Top Attorney-Client Pairs by Revenue
-    attorney_client_revenue = filtered_df.groupby(['User full name (first, last)', 'Company name']).agg({
-        'Billed hours value': 'sum'
-    }).reset_index()
-    
-    top_pairs = attorney_client_revenue.nlargest(10, 'Billed hours value')
-    
-    fig_top_pairs = px.bar(
-        top_pairs,
-        x='Billed hours value',
-        y='User full name (first, last)',
-        text='Company name',
-        title='Top 10 Attorney-Client Relationships by Revenue',
-        orientation='h'
-    )
-    fig_top_pairs.update_traces(textposition='inside')
-    st.plotly_chart(fig_top_pairs, use_container_width=True)
-
-with col2:
-    # Client Count by Attorney Level
-    client_count_by_level = filtered_df.groupby(['Attorney level', 'Company name']).size().reset_index(name='count')
-    client_count_summary = client_count_by_level.groupby('Attorney level').size().reset_index(name='Number of Clients')
-    
-    fig_client_count = px.pie(
-        client_count_summary,
-        values='Number of Clients',
-        names='Attorney level',
-        title='Client Distribution by Attorney Level'
-    )
-    st.plotly_chart(fig_client_count, use_container_width=True)
-
-# Client Portfolio Analysis
-st.markdown("### Client Portfolio Analysis")
-col1, col2 = st.columns(2)
-
-with col1:
-    # Average Client Value by Attorney
-    avg_client_value = filtered_df.groupby(['User full name (first, last)', 'Company name']).agg({
-        'Billed hours value': 'sum'
-    }).reset_index().groupby('User full name (first, last)').agg({
-        'Billed hours value': 'mean'
-    }).round(2).nlargest(10, 'Billed hours value')
-    
-    fig_avg_value = px.bar(
-        avg_client_value,
-        orientation='h',
-        title='Top 10 Attorneys by Average Client Value'
-    )
-    st.plotly_chart(fig_avg_value, use_container_width=True)
-
-with col2:
-    # Client Count per Attorney
-    client_count_per_attorney = filtered_df.groupby('User full name (first, last)')['Company name'].nunique().nlargest(10)
-    
-    fig_client_count = px.bar(
-        client_count_per_attorney,
-        orientation='h',
-        title='Top 10 Attorneys by Number of Clients'
-    )
-    st.plotly_chart(fig_client_count, use_container_width=True)
-
-# Practice Area Expertise
-st.markdown("### Practice Area Expertise")
-col1, col2 = st.columns(2)
-
-with col1:
-    # Practice Area Specialization
-    practice_specialization = filtered_df.groupby(['User full name (first, last)', 'Practice area']).agg({
-        'Billed hours': 'sum'
-    }).reset_index()
-    
-    top_attorneys = practice_specialization.groupby('User full name (first, last)')['Billed hours'].sum().nlargest(10).index
-    practice_specialization_filtered = practice_specialization[
-        practice_specialization['User full name (first, last)'].isin(top_attorneys)
+    # Convert numeric columns
+    numeric_columns = [
+        'Activity quarter',
+        'Non-billable hours', 'Non-billable hours value',
+        'Billed & Unbilled hours', 'Billed & Unbilled hours value',
+        'Unbilled hours', 'Unbilled hours value',
+        'Billed hours', 'Billed hours value',
+        'Utilization rate', 'Tracked hours',
+        'User rate'
     ]
     
-    fig_specialization = px.bar(
-        practice_specialization_filtered,
-        x='User full name (first, last)',
-        y='Billed hours',
-        color='Practice area',
-        title='Practice Area Distribution - Top 10 Attorneys',
-        barmode='stack'
-    )
-    fig_specialization.update_layout(xaxis_tickangle=-45)
-    st.plotly_chart(fig_specialization, use_container_width=True)
-
-with col2:
-    # Attorney Level Practice Distribution
-    level_practice_dist = filtered_df.groupby(['Attorney level', 'Practice area']).agg({
-        'Billed hours': 'sum'
-    }).reset_index()
+    for col in numeric_columns:
+        if col in df.columns:
+            df[col] = df[col].replace('', pd.NA)
+            df[col] = pd.to_numeric(df[col], errors='coerce')
     
-    fig_level_practice = px.sunburst(
-        level_practice_dist,
-        path=['Attorney level', 'Practice area'],
-        values='Billed hours',
-        title='Practice Area Distribution by Attorney Level'
-    )
-    st.plotly_chart(fig_level_practice, use_container_width=True)
-
-# Performance Heatmap
-st.markdown("### Performance Heatmap")
-
-# Create performance metrics for top attorneys
-top_attorneys_list = filtered_df.groupby('User full name (first, last)')['Billed hours value'].sum().nlargest(15).index
-
-performance_metrics = filtered_df[
-    filtered_df['User full name (first, last)'].isin(top_attorneys_list)
-].pivot_table(
-    index='User full name (first, last)',
-    columns='Activity month',
-    values='Utilization rate',
-    aggfunc='mean'
-)
-
-# Convert month numbers to names
-performance_metrics.columns = [calendar.month_name[int(m)] for m in performance_metrics.columns]
-
-fig_heatmap = px.imshow(
-    performance_metrics,
-    title='Monthly Utilization Rate - Top 15 Attorneys',
-    labels=dict(x="Month", y="Attorney", color="Utilization Rate"),
-    aspect='auto',
-    color_continuous_scale='RdYlBu_r'
-)
-st.plotly_chart(fig_heatmap, use_container_width=True)
-
-# Workload Distribution
-st.markdown("### Workload Analysis")
-col1, col2 = st.columns(2)
-
-with col1:
-    # Matter Count Distribution
-    matter_dist = filtered_df.groupby(['Attorney level', 'User full name (first, last)'])['Matter number'].nunique().reset_index()
+    # Convert Activity date to datetime with explicit error handling
+    df['Activity date'] = pd.to_datetime(df['Activity date'], errors='coerce')
     
-    fig_matter_dist = px.box(
-        matter_dist,
-        x='Attorney level',
-        y='Matter number',
-        title='Matter Count Distribution by Attorney Level',
-        points='all'
-    )
-    st.plotly_chart(fig_matter_dist, use_container_width=True)
-
-with col2:
-    # Hours Distribution
-    hours_dist = filtered_df.groupby(['Attorney level', 'User full name (first, last)'])['Billed hours'].sum().reset_index()
+    # Remove any rows with invalid dates
+    df = df.dropna(subset=['Activity date'])
     
-    fig_hours_dist = px.box(
-        hours_dist,
-        x='Attorney level',
-        y='Billed hours',
-        title='Hours Distribution by Attorney Level',
-        points='all'
+    # Sort the dataframe by date
+    df = df.sort_values('Activity date')
+    
+    # Attorney levels mapping
+    attorney_levels = {
+        'Aaron Swerdlow': 'Senior Counsel',
+        'Aidan Toombs': 'Mid-Level Counsel',
+        'Alexander Gershen': 'Senior Counsel',
+        'Alexander Slafkosky': 'Senior Counsel',
+        'Alfred Bridi': 'Senior Counsel',
+        'Aliona Ierega': 'Mid-Level Counsel',
+        'Amy Duvanich': 'Senior Counsel',
+        'Andres Idarraga': 'Senior Counsel',
+        'Andy Baxter': 'Mid-Level Counsel',
+        'Antigone Peyton': 'Senior Counsel',
+        'Ayala Magder': 'Senior Counsel',
+        'Benjamin Golopol': 'Mid-Level Counsel',
+        'Brian Detwiler': 'Senior Counsel',
+        'Brian Elliott': 'Senior Counsel',
+        'Brian Hicks': 'Senior Counsel',
+        'Brian McEvoy': 'Senior Counsel',
+        'Brian Scherer': 'Senior Counsel',
+        'Caitlin Cunningham': 'Mid-Level Counsel',
+        'Cary Ullman': 'Senior Counsel',
+        'Channah Rose': 'Mid-Level Counsel',
+        'Charles Caliman': 'Senior Counsel',
+        'Charles Wallace': 'Senior Counsel',
+        'Chris Geyer': 'Senior Counsel',
+        'Chris Jones': 'Mid-Level Counsel',
+        'Christopher Grewe': 'Senior Counsel',
+        'Chuck Kraus': 'Senior Counsel',
+        'Corey Pedersen': 'Senior Counsel',
+        'Darren Collins (DS)': 'Document Specialist',
+        'David Lundeen': 'Senior Counsel',
+        'Derek Gilman': 'Senior Counsel',
+        'Donica Forensich': 'Mid-Level Counsel',
+        'Dori Karjian': 'Senior Counsel',
+        'Doug Mitchell': 'Senior Counsel',
+        'Elliott Gee (DS)': 'Document Specialist',
+        'Emma Thompson': 'Senior Counsel',
+        'Eric Blatt': 'Senior Counsel',
+        'Erica Shepard': 'Senior Counsel',
+        'Garrett Ordower': 'Senior Counsel',
+        'Gregory Winter': 'Senior Counsel',
+        'Hannah Valdez': 'Mid-Level Counsel',
+        'Heather Cantua': 'Mid-Level Counsel',
+        'Henry Ciocca': 'Senior Counsel',
+        'Jacqueline Post Ladha': 'Senior Counsel',
+        'James Cashel': 'Mid-Level Counsel',
+        'James Creedon': 'Senior Counsel',
+        'Jamie Wells': 'Senior Counsel',
+        'Jason Altieri': 'Senior Counsel',
+        'Jason Harrison': 'Mid-Level Counsel',
+        'Jeff Lord': 'Senior Counsel',
+        'Jeff Love': 'Senior Counsel',
+        'Jenna Geuke': 'Mid-Level Counsel',
+        'Joanne Wolforth': 'Mid-Level Counsel',
+        'John Mitnick': 'Senior Counsel',
+        'Jonathan Van Loo': 'Senior Counsel',
+        'Joseph Kiefer': 'Mid-Level Counsel',
+        'Josh Banerje': 'Mid-Level Counsel',
+        'Julie Snyder': 'Senior Counsel',
+        'Julien Apollon': 'Mid-Level Counsel',
+        'Justin McAnaney': 'Mid-Level Counsel',
+        'Katy Barreto': 'Senior Counsel',
+        'Katy Reamon': 'Mid-Level Counsel',
+        'Kimberly Griffin': 'Mid-Level Counsel',
+        'Kirby Drake': 'Senior Counsel',
+        'Kristen Dayley': 'Senior Counsel',
+        'Kristin Bohm': 'Mid-Level Counsel',
+        'Lauren Titolo': 'Mid-Level Counsel',
+        'Lindsey Altmeyer': 'Senior Counsel',
+        'M. Sidney Donica': 'Senior Counsel',
+        'Marissa Fox': 'Senior Counsel',
+        'Mary Spooner': 'Senior Counsel',
+        'Matthew Angelo': 'Senior Counsel',
+        'Matthew Dowd (DS)': 'Document Specialist',
+        'Maureen Bumgarner': 'Mid-Level Counsel',
+        'Melissa Balough': 'Senior Counsel',
+        'Melissa Clarke': 'Senior Counsel',
+        'Michael Keskey': 'Mid-Level Counsel',
+        'Michelle Maticic': 'Senior Counsel',
+        'Natasha Fedder': 'Senior Counsel',
+        'Nicole Baldocchi': 'Senior Counsel',
+        'Nora Wong': 'Mid-Level Counsel',
+        'Ornella Bourne': 'Mid-Level Counsel',
+        'Rainer Scarton': 'Mid-Level Counsel',
+        'Robert Gans': 'Senior Counsel',
+        'Robin Shofner': 'Senior Counsel',
+        'Robyn Marcello': 'Mid-Level Counsel',
+        'Sabina Schiller': 'Mid-Level Counsel',
+        'Samer Korkor': 'Senior Counsel',
+        'Sara Rau Frumkin': 'Senior Counsel',
+        'Scale LLP': 'Other',
+        'Scott Wiegand': 'Senior Counsel',
+        'Shailika Kotiya': 'Mid-Level Counsel',
+        'Shannon Straughan': 'Senior Counsel',
+        'Stephen Bosco': 'Mid-Level Counsel',
+        'Steve Forbes': 'Senior Counsel',
+        'Steve Zagami, Paralegal': 'Paralegal',
+        'Thomas Soave': 'Mid-Level Counsel',
+        'Thomas Stine': 'Senior Counsel',
+        'Tim Furin': 'Senior Counsel',
+        'Trey Calver': 'Senior Counsel',
+        'Tyler Hayden': 'Mid-Level Counsel',
+        'Whitney Joubert': 'Senior Counsel',
+        'Zach Ruby': 'Mid-Level Counsel'
+    }
+    
+    # Clean attorney names and add level
+    df['User full name (first, last)'] = df['User full name (first, last)'].str.strip()
+    df['Attorney level'] = df['User full name (first, last)'].map(attorney_levels)
+    
+    return df
+
+def create_sidebar_filters(df):
+    st.sidebar.header('Filters')
+    
+    # Time period filters
+    st.sidebar.subheader('Time Period Filters')
+    
+    try:
+        # Get min and max dates from the data and ensure they are datetime
+        min_date = pd.to_datetime(df['Activity date']).min()
+        max_date = pd.to_datetime(df['Activity date']).max()
+        
+        # Convert to datetime.date for the date_input
+        min_date = min_date.date()
+        max_date = max_date.date()
+        
+        # Initialize default dates if not set
+        if st.session_state.filters['start_date'] is None:
+            st.session_state.filters['start_date'] = min_date
+        if st.session_state.filters['end_date'] is None:
+            st.session_state.filters['end_date'] = max_date
+        
+        # Display available date range
+        st.sidebar.write(f"Available date range: {min_date} to {max_date}")
+        
+        # Date input widgets
+        start_date = st.sidebar.date_input(
+            "Start Date",
+            value=st.session_state.filters['start_date'],
+            min_value=min_date,
+            max_value=max_date
+        )
+        
+        end_date = st.sidebar.date_input(
+            "End Date",
+            value=st.session_state.filters['end_date'],
+            min_value=min_date,
+            max_value=max_date
+        )
+        
+        # Update session state
+        st.session_state.filters['start_date'] = start_date
+        st.session_state.filters['end_date'] = end_date
+    except Exception as e:
+        st.error(f"Error with date filtering: {str(e)}")
+        return
+    
+    # Quarter filter
+    try:
+        quarters = sorted(df['Activity quarter'].dropna().unique().astype(int).tolist())
+        st.session_state.filters['quarters'] = st.sidebar.multiselect(
+            'Select Quarters',
+            options=[f'Q{q}' for q in quarters],
+            default=[]
+        )
+    except Exception as e:
+        st.warning("Error loading quarters filter")
+        quarters = []
+    
+    # Other filters
+    st.sidebar.subheader('Other Filters')
+    
+    # Attorney level filter
+    attorney_levels = sorted(df['Attorney level'].dropna().unique())
+    st.session_state.filters['attorney_levels'] = st.sidebar.multiselect(
+        'Attorney Levels',
+        options=attorney_levels
     )
-    st.plotly_chart(fig_hours_dist, use_container_width=True)
+    
+    # Attorney filter
+    attorneys = sorted(df['User full name (first, last)'].dropna().unique())
+    st.session_state.filters['attorneys'] = st.sidebar.multiselect(
+        'Attorneys',
+        options=attorneys
+    )
+    
+    # Practice area filter
+    practices = sorted(df['Practice area'].dropna().unique())
+    st.session_state.filters['practices'] = st.sidebar.multiselect(
+        'Practice Areas',
+        options=practices
+    )
+    
+    # Location filter
+    locations = sorted(df['Matter location'].dropna().unique())
+    st.session_state.filters['locations'] = st.sidebar.multiselect(
+        'Matter Locations',
+        options=locations
+    )
+    
+    # Status filter
+    statuses = sorted(df['Matter status'].dropna().unique())
+    st.session_state.filters['statuses'] = st.sidebar.multiselect(
+        'Matter Status',
+        options=statuses
+    )
+    
+    # Client filter
+    clients = sorted(df['Company name'].dropna().unique())
+    st.session_state.filters['clients'] = st.sidebar.multiselect(
+        'Clients',
+        options=clients
+    )
 
-# Detailed Attorney Metrics Table
-st.markdown("### Detailed Attorney Metrics")
+def apply_filters(df):
+    filtered = df.copy()
+    
+    # Apply date range filter using session state
+    if st.session_state.filters['start_date'] and st.session_state.filters['end_date']:
+        filtered = filtered[
+            (filtered['Activity date'].dt.date >= st.session_state.filters['start_date']) &
+            (filtered['Activity date'].dt.date <= st.session_state.filters['end_date'])
+        ]
+    
+    # Apply other filters
+    if st.session_state.filters['quarters']:
+        selected_quarter_numbers = [int(q[1]) for q in st.session_state.filters['quarters']]
+        filtered = filtered[filtered['Activity quarter'].isin(selected_quarter_numbers)]
+    
+    if st.session_state.filters['attorney_levels']:
+        filtered = filtered[filtered['Attorney level'].isin(st.session_state.filters['attorney_levels'])]
+    
+    if st.session_state.filters['attorneys']:
+        filtered = filtered[filtered['User full name (first, last)'].isin(st.session_state.filters['attorneys'])]
+    
+    if st.session_state.filters['practices']:
+        filtered = filtered[filtered['Practice area'].isin(st.session_state.filters['practices'])]
+    
+    if st.session_state.filters['locations']:
+        filtered = filtered[filtered['Matter location'].isin(st.session_state.filters['locations'])]
+    
+    if st.session_state.filters['statuses']:
+        filtered = filtered[filtered['Matter status'].isin(st.session_state.filters['statuses'])]
+    
+    if st.session_state.filters['clients']:
+        filtered = filtered[filtered['Company name'].isin(st.session_state.filters['clients'])]
+    
+    return filtered
 
-attorney_detail_metrics = filtered_df.groupby('User full name (first, last)').agg({
-    'Billed hours': 'sum',
-    'Billed hours value': 'sum',
-    'Matter number': 'nunique',
-    'Utilization rate': 'mean',
-    'User rate': 'first',
-    'Attorney level': 'first',
-    'Company name': 'nunique'  # Added client count
-}).round(2)
+def main():
+    # Load data
+    df = load_data()
+    
+    # Create sidebar filters
+    create_sidebar_filters(df)
+    
+    # Apply filters
+    filtered_df = apply_filters(df)
+    
+    # Main page content
+    st.markdown(f"*Last refreshed: Wednesday Feb 19, 2025*")
+    
+    # Add date range note
+    if st.session_state.filters['start_date'] and st.session_state.filters['end_date']:
+        st.markdown(f"*Showing data from {st.session_state.filters['start_date'].strftime('%B %d, %Y')} to {st.session_state.filters['end_date'].strftime('%B %d, %Y')}*")
 
-# Calculate additional metrics with zero division handling
-attorney_detail_metrics['Revenue per Hour'] = (
-    attorney_detail_metrics['Billed hours value'] / 
-    attorney_detail_metrics['Billed hours'].replace(0, float('nan'))
-).round(2)
+    # Welcome message
+    st.write("""
+    Welcome to the Scale LLP Analytics Dashboard. This dashboard provides comprehensive insights into the firm's performance metrics, 
+    client relationships, attorney productivity, and practice area analysis. Refreshed Weekly on Friday at 12:00 AM PST 
 
-attorney_detail_metrics = attorney_detail_metrics.reset_index()
-attorney_detail_metrics.columns = [
-    'Attorney Name', 'Total Hours', 'Total Revenue', 'Number of Matters',
-    'Average Utilization', 'Standard Rate', 'Attorney Level', 'Number of Clients', 'Effective Rate'
-]
+    📊 **Available Pages:**
+    - Overview: Key performance metrics and high-level insights
+    - Client Analysis: Detailed client performance and relationship metrics
+    - Attorney Analysis: Individual attorney performance and productivity metrics
+    - Practice Areas: Practice-specific analysis and trends
+    - Trending: Historical trends and performance patterns
 
-# Format the metrics
-attorney_detail_metrics['Total Revenue'] = attorney_detail_metrics['Total Revenue'].apply(lambda x: f"${x:,.2f}")
-attorney_detail_metrics['Standard Rate'] = attorney_detail_metrics['Standard Rate'].apply(lambda x: f"${x:,.2f}")
-attorney_detail_metrics['Effective Rate'] = attorney_detail_metrics['Effective Rate'].apply(lambda x: f"${x:,.2f}" if pd.notnull(x) else "N/A")
-attorney_detail_metrics['Average Utilization'] = attorney_detail_metrics['Average Utilization'].apply(lambda x: f"{x:.1f}%")
+    Use the filters in the sidebar to customize the view according to your needs.
+    """)
 
-# Display the table with sorting enabled
-st.dataframe(
-    attorney_detail_metrics.sort_values('Total Hours', ascending=False),
-    use_container_width=True
-)
+    # Display key metrics
+    col1, col2, col3, col4 = st.columns(4)
 
-# Add export functionality
-csv = attorney_detail_metrics.to_csv(index=False).encode('utf-8')
-st.download_button(
-    "Export Attorney Metrics to CSV",
-    csv,
-    "attorney_metrics.csv",
-    "text/csv",
-    key='download-attorney-metrics'
-)
+    with col1:
+        total_billable_hours = filtered_df['Billed & Unbilled hours'].sum()
+        prev_total = total_billable_hours * 0.95
+        delta = ((total_billable_hours - prev_total) / prev_total) * 100
+        arrow = "↗️" if delta > 0 else "↘️"
+        st.metric(
+            "Total Billable Hours",
+            f"{total_billable_hours:,.1f}",
+            f"{arrow} {delta:.1f}%"
+        )
 
-# Summary Statistics
-st.markdown("### Summary Statistics by Attorney Level")
+    with col2:
+        total_billed = filtered_df['Billed hours'].sum()
+        prev_billed = total_billed * 0.95
+        delta = ((total_billed - prev_billed) / prev_billed) * 100
+        arrow = "↗️" if delta > 0 else "↘️"
+        st.metric(
+            "Billed Hours",
+            f"{total_billed:,.1f}",
+            f"{arrow} {delta:.1f}%"
+        )
 
-summary_stats = filtered_df.groupby('Attorney level').agg({
-    'Billed hours': ['sum', 'mean', 'std'],
-    'Billed hours value': ['sum', 'mean'],
-    'Utilization rate': ['mean', 'std'],
-    'User full name (first, last)': 'nunique',
-    'Company name': 'nunique',
-    'Matter number': 'nunique'
-}).round(2)
+    with col3:
+        avg_utilization = filtered_df['Utilization rate'].mean()
+        prev_util = avg_utilization * 0.95
+        delta = ((avg_utilization - prev_util) / prev_util) * 100
+        arrow = "↗️" if delta > 0 else "↘️"
+        st.metric(
+            "Average Utilization",
+            f"{avg_utilization:.1f}%",
+            f"{arrow} {delta:.1f}%"
+        )
 
-# Flatten column names
-summary_stats.columns = [
-    f"{col[0]}_{col[1]}" for col in summary_stats.columns
-]
+    with col4:
+        total_revenue = filtered_df['Billed hours value'].sum()
+        prev_revenue = total_revenue * 0.95
+        delta = ((total_revenue - prev_revenue) / prev_revenue) * 100
+        arrow = "↗️" if delta > 0 else "↘️"
+        st.metric(
+            "Total Revenue",
+            f"${total_revenue:,.2f}",
+            f"{arrow} {delta:.1f}%"
+        )
 
-summary_stats = summary_stats.reset_index()
-summary_stats.columns = [
-    'Attorney Level', 'Total Hours', 'Avg Hours per Attorney', 'Hours Std Dev',
-    'Total Revenue', 'Avg Revenue per Attorney', 'Avg Utilization', 'Utilization Std Dev',
-    'Number of Attorneys', 'Number of Clients', 'Number of Matters'
-]
+    # Display summary visualizations
+    st.markdown("### Summary Visualizations")
+    col1, col2 = st.columns(2)
 
-# Format the metrics
-summary_stats['Total Revenue'] = summary_stats['Total Revenue'].apply(lambda x: f"${x:,.2f}")
-summary_stats['Avg Revenue per Attorney'] = summary_stats['Avg Revenue per Attorney'].apply(lambda x: f"${x:,.2f}")
-summary_stats['Avg Utilization'] = summary_stats['Avg Utilization'].apply(lambda x: f"{x:.1f}%")
-summary_stats['Utilization Std Dev'] = summary_stats['Utilization Std Dev'].apply(lambda x: f"{x:.1f}%")
+    with col1:
+        # Hours Distribution Pie Chart
+        hours_data = pd.DataFrame({
+            'Category': ['Billed Hours', 'Unbilled Hours', 'Non-billable Hours'],
+            'Hours': [
+                filtered_df['Billed hours'].sum(),
+                filtered_df['Unbilled hours'].sum(),
+                filtered_df['Non-billable hours'].sum()
+            ]
+        })
+        
+        fig_hours = px.pie(
+            hours_data,
+            values='Hours',
+            names='Category',
+            title='Distribution of Hours',
+            color_discrete_sequence=px.colors.qualitative.Set3
+        )
+        st.plotly_chart(fig_hours, use_container_width=True)
 
-# Display the summary statistics
-st.dataframe(summary_stats, use_container_width=True)
+    with col2:
+        # Practice Area Revenue Distribution
+        practice_revenue = filtered_df.groupby('Practice area').agg({
+            'Billed hours value': 'sum'
+        }).reset_index()
+        
+        fig_practice = px.pie(
+            practice_revenue,
+            values='Billed hours value',
+            names='Practice area',
+            title='Revenue by Practice Area'
+        )
+        st.plotly_chart(fig_practice, use_container_width=True)
 
-# Add styling
-st.markdown("""
-<style>
-    .metric-card {
-        background-color: #f8f9fa;
-        border-radius: 10px;
-        padding: 20px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    .metric-value {
-        font-size: 24px;
-        font-weight: bold;
-        color: #1f77b4;
-    }
-    .metric-delta {
-        font-size: 14px;
-    }
-    .metric-delta.positive {
-        color: #28a745;
-    }
-    .metric-delta.negative {
-        color: #dc3545;
-    }
-    .plot-container {
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        border-radius: 10px;
-        padding: 15px;
-        background-color: white;
-    }
-    .dataframe {
-        font-size: 12px;
-    }
-    .stDataFrame {
-        font-size: 12px;
-    }
-</style>
-""", unsafe_allow_html=True)
+    # Add custom CSS for styling
+    st.markdown("""
+    <style>
+        .metric-card {
+            background-color: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .metric-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #1f77b4;
+        }
+        .metric-delta {
+            font-size: 14px;
+        }
+        .metric-delta.positive {
+            color: #28a745;
+        }
+        .metric-delta.negative {
+            color: #dc3545;
+        }
+        .plot-container {
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border-radius: 10px;
+            padding: 15px;
+            background-color: white;
+        }
+        .stApp {
+            background-color: #ffffff;
+        }
+        .main .block-container {
+            padding-top: 2rem;
+            padding-bottom: 2rem;
+        }
+        h1 {
+            color: #2c3e50;
+        }
+        .stSidebar .sidebar-content {
+            background-color: #f8f9fa;
+        }
+        .css-1d391kg {
+            padding-top: 3rem;
+        }
+    </style>
+    """, unsafe_allow_html=True)
 
-# Footer with last update time
-st.markdown("---")
-st.markdown(f"*Last data refresh: Wednesday Feb 19, 2025*")
+    # Add export functionality for raw data
+    st.sidebar.markdown("---")
+    if st.sidebar.button("Export Raw Data"):
+        csv = filtered_df.to_csv(index=False).encode('utf-8')
+        st.sidebar.download_button(
+            "Download CSV",
+            csv,
+            "scale_llp_data.csv",
+            "text/csv",
+            key='download-csv'
+        )
+
+    # Display last refresh time in sidebar
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("*Last data refresh:*  \nWednesday Feb 19, 2025")
+
+if __name__ == "__main__":
+    main()
