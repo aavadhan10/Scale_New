@@ -54,8 +54,11 @@ def load_data():
             df[col] = df[col].replace('', pd.NA)
             df[col] = pd.to_numeric(df[col], errors='coerce')
     
-    # Convert Activity date to datetime with explicit format
-    df['Activity date'] = pd.to_datetime(df['Activity date'], format='%Y-%m-%d', errors='coerce')
+    # Convert Activity date to datetime with explicit error handling
+    df['Activity date'] = pd.to_datetime(df['Activity date'], errors='coerce')
+    
+    # Remove any rows with invalid dates
+    df = df.dropna(subset=['Activity date'])
     
     # Sort the dataframe by date
     df = df.sort_values('Activity date')
@@ -178,49 +181,57 @@ def create_sidebar_filters(df):
     # Time period filters
     st.sidebar.subheader('Time Period Filters')
     
-    # Get min and max dates from the data
-    min_date = df['Activity date'].min()
-    max_date = df['Activity date'].max()
-    
-    # Convert to datetime.date for the date_input
-    min_date = min_date.date()
-    max_date = max_date.date()
-    
-    # Display available date range
-    st.sidebar.write(f"Available date range: {min_date} to {max_date}")
-    
-    # Initialize default dates if not set
-    if st.session_state.filters['start_date'] is None:
-        st.session_state.filters['start_date'] = min_date
-    if st.session_state.filters['end_date'] is None:
-        st.session_state.filters['end_date'] = max_date
-    
-    # Date input widgets
-    start_date = st.sidebar.date_input(
-        "Start Date",
-        value=st.session_state.filters['start_date'],
-        min_value=min_date,
-        max_value=max_date
-    )
-    
-    end_date = st.sidebar.date_input(
-        "End Date",
-        value=st.session_state.filters['end_date'],
-        min_value=min_date,
-        max_value=max_date
-    )
-    
-    # Update session state
-    st.session_state.filters['start_date'] = start_date
-    st.session_state.filters['end_date'] = end_date
+    try:
+        # Get min and max dates from the data and ensure they are datetime
+        min_date = pd.to_datetime(df['Activity date']).min()
+        max_date = pd.to_datetime(df['Activity date']).max()
+        
+        # Convert to datetime.date for the date_input
+        min_date = min_date.date()
+        max_date = max_date.date()
+        
+        # Initialize default dates if not set
+        if st.session_state.filters['start_date'] is None:
+            st.session_state.filters['start_date'] = min_date
+        if st.session_state.filters['end_date'] is None:
+            st.session_state.filters['end_date'] = max_date
+        
+        # Display available date range
+        st.sidebar.write(f"Available date range: {min_date} to {max_date}")
+        
+        # Date input widgets
+        start_date = st.sidebar.date_input(
+            "Start Date",
+            value=st.session_state.filters['start_date'],
+            min_value=min_date,
+            max_value=max_date
+        )
+        
+        end_date = st.sidebar.date_input(
+            "End Date",
+            value=st.session_state.filters['end_date'],
+            min_value=min_date,
+            max_value=max_date
+        )
+        
+        # Update session state
+        st.session_state.filters['start_date'] = start_date
+        st.session_state.filters['end_date'] = end_date
+    except Exception as e:
+        st.error(f"Error with date filtering: {str(e)}")
+        return
     
     # Quarter filter
-    quarters = sorted(df['Activity quarter'].dropna().unique().astype(int).tolist())
-    st.session_state.filters['quarters'] = st.sidebar.multiselect(
-        'Select Quarters',
-        options=[f'Q{q}' for q in quarters],
-        default=[]
-    )
+    try:
+        quarters = sorted(df['Activity quarter'].dropna().unique().astype(int).tolist())
+        st.session_state.filters['quarters'] = st.sidebar.multiselect(
+            'Select Quarters',
+            options=[f'Q{q}' for q in quarters],
+            default=[]
+        )
+    except Exception as e:
+        st.warning("Error loading quarters filter")
+        quarters = []
     
     # Other filters
     st.sidebar.subheader('Other Filters')
@@ -270,7 +281,7 @@ def create_sidebar_filters(df):
 def apply_filters(df):
     filtered = df.copy()
     
-    # Apply date range filter
+    # Apply date range filter using session state
     if st.session_state.filters['start_date'] and st.session_state.filters['end_date']:
         filtered = filtered[
             (filtered['Activity date'].dt.date >= st.session_state.filters['start_date']) &
