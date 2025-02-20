@@ -12,7 +12,6 @@ with col1:
 with col2:
     st.title("Scale LLP Analytics Dashboard")
 
-
 # Initialize session state for filters
 if 'filters' not in st.session_state:
     st.session_state.filters = {
