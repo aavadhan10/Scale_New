@@ -5,18 +5,13 @@ import plotly.graph_objects as go
 import calendar
 from datetime import datetime
 
-# Page configuration
-st.set_page_config(
-    page_title="Scale LLP Analytics Dashboard",
-    layout="wide"
-)
-
-# Title section
+# In your main content, replace the title with:
 col1, col2 = st.columns([0.1, 0.9])
 with col1:
     st.image("logo.png", width=50)
 with col2:
     st.title("Scale LLP Analytics Dashboard")
+
 
 # Initialize session state for filters
 if 'filters' not in st.session_state:
@@ -35,7 +30,6 @@ if 'filters' not in st.session_state:
 # Load data function
 @st.cache_data
 def load_data():
-    # Read the CSV file
     df = pd.read_csv("Test_Full_Year.csv")
     
     # Convert numeric columns
@@ -54,14 +48,8 @@ def load_data():
             df[col] = df[col].replace('', pd.NA)
             df[col] = pd.to_numeric(df[col], errors='coerce')
     
-    # Convert Activity date to datetime with explicit error handling
-    df['Activity date'] = pd.to_datetime(df['Activity date'], errors='coerce')
-    
-    # Remove any rows with invalid dates
-    df = df.dropna(subset=['Activity date'])
-    
-    # Sort the dataframe by date
-    df = df.sort_values('Activity date')
+    # Convert Activity date to datetime
+    df['Activity date'] = pd.to_datetime(df['Activity date'])
     
     # Attorney levels mapping
     attorney_levels = {
@@ -181,57 +169,42 @@ def create_sidebar_filters(df):
     # Time period filters
     st.sidebar.subheader('Time Period Filters')
     
-    try:
-        # Get min and max dates from the data and ensure they are datetime
-        min_date = pd.to_datetime(df['Activity date']).min()
-        max_date = pd.to_datetime(df['Activity date']).max()
-        
-        # Convert to datetime.date for the date_input
-        min_date = min_date.date()
-        max_date = max_date.date()
-        
-        # Initialize default dates if not set
-        if st.session_state.filters['start_date'] is None:
-            st.session_state.filters['start_date'] = min_date
-        if st.session_state.filters['end_date'] is None:
-            st.session_state.filters['end_date'] = max_date
-        
-        # Display available date range
-        st.sidebar.write(f"Available date range: {min_date} to {max_date}")
-        
-        # Date input widgets
-        start_date = st.sidebar.date_input(
-            "Start Date",
-            value=st.session_state.filters['start_date'],
-            min_value=min_date,
-            max_value=max_date
-        )
-        
-        end_date = st.sidebar.date_input(
-            "End Date",
-            value=st.session_state.filters['end_date'],
-            min_value=min_date,
-            max_value=max_date
-        )
-        
-        # Update session state
-        st.session_state.filters['start_date'] = start_date
-        st.session_state.filters['end_date'] = end_date
-    except Exception as e:
-        st.error(f"Error with date filtering: {str(e)}")
-        return
+    # Date Range filter
+    min_date = df['Activity date'].min()
+    max_date = df['Activity date'].max()
+    
+    # Initialize default dates if not set
+    if st.session_state.filters['start_date'] is None:
+        st.session_state.filters['start_date'] = min_date
+    if st.session_state.filters['end_date'] is None:
+        st.session_state.filters['end_date'] = max_date
+    
+    # Date input widgets that update session state
+    start_date = st.sidebar.date_input(
+        "Start Date",
+        value=st.session_state.filters['start_date'],
+        min_value=min_date,
+        max_value=max_date
+    )
+    
+    end_date = st.sidebar.date_input(
+        "End Date",
+        value=st.session_state.filters['end_date'],
+        min_value=min_date,
+        max_value=max_date
+    )
+    
+    # Update session state
+    st.session_state.filters['start_date'] = start_date
+    st.session_state.filters['end_date'] = end_date
     
     # Quarter filter
-    try:
-        quarters = sorted(df['Activity quarter'].dropna().unique().astype(int).tolist())
-        st.session_state.filters['quarters'] = st.sidebar.multiselect(
-            'Select Quarters',
-            options=[f'Q{q}' for q in quarters],
-            default=[]
-        )
-    except Exception as e:
-        st.warning("Error loading quarters filter")
-        quarters = []
+    quarters = sorted(df['Activity quarter'].dropna().unique().astype(int).tolist())
+    st.session_state.filters['quarters'] = st.sidebar.multiselect(
+        'Select Quarters',
+        options=[f'Q{q}' for q in quarters],
+        default=[]
+    )
     
     # Other filters
     st.sidebar.subheader('Other Filters')
