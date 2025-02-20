@@ -47,8 +47,8 @@ def load_data():
             df[col] = df[col].replace('', pd.NA)
             df[col] = pd.to_numeric(df[col], errors='coerce')
     
-    # Convert Activity date to datetime
-    df['Activity date'] = pd.to_datetime(df['Activity date'])
+    # Convert Activity date to datetime explicitly
+    df['Activity date'] = pd.to_datetime(df['Activity date'], errors='coerce')
     
     # Attorney levels mapping
     attorney_levels = {
@@ -168,9 +168,12 @@ def create_sidebar_filters(df):
     # Time period filters
     st.sidebar.subheader('Time Period Filters')
     
-    # Date Range filter
-    min_date = df['Activity date'].min()
-    max_date = df['Activity date'].max()
+    # Date Range filter - ensure we're getting the full range
+    min_date = df['Activity date'].min().date()  # Convert to date for the date_input
+    max_date = df['Activity date'].max().date()
+    
+    # Print date range for verification
+    st.sidebar.write(f"Available date range: {min_date} to {max_date}")
     
     # Initialize default dates if not set
     if st.session_state.filters['start_date'] is None:
