@@ -5,7 +5,13 @@ import plotly.graph_objects as go
 import calendar
 from datetime import datetime
 
-# In your main content, replace the title with:
+# Page configuration
+st.set_page_config(
+    page_title="Scale LLP Analytics Dashboard",
+    layout="wide"
+)
+
+# Title section
 col1, col2 = st.columns([0.1, 0.9])
 with col1:
     st.image("logo.png", width=50)
@@ -29,6 +35,7 @@ if 'filters' not in st.session_state:
 # Load data function
 @st.cache_data
 def load_data():
+    # Read the CSV file
     df = pd.read_csv("Test_Full_Year.csv")
     
     # Convert numeric columns
@@ -47,8 +54,11 @@ def load_data():
             df[col] = df[col].replace('', pd.NA)
             df[col] = pd.to_numeric(df[col], errors='coerce')
     
-    # Convert Activity date to datetime explicitly
-    df['Activity date'] = pd.to_datetime(df['Activity date'], errors='coerce')
+    # Convert Activity date to datetime with explicit format
+    df['Activity date'] = pd.to_datetime(df['Activity date'], format='%Y-%m-%d', errors='coerce')
+    
+    # Sort the dataframe by date
+    df = df.sort_values('Activity date')
     
     # Attorney levels mapping
     attorney_levels = {
@@ -168,11 +178,15 @@ def create_sidebar_filters(df):
     # Time period filters
     st.sidebar.subheader('Time Period Filters')
     
-    # Date Range filter - ensure we're getting the full range
-    min_date = df['Activity date'].min().date()  # Convert to date for the date_input
-    max_date = df['Activity date'].max().date()
+    # Get min and max dates from the data
+    min_date = df['Activity date'].min()
+    max_date = df['Activity date'].max()
     
-    # Print date range for verification
+    # Convert to datetime.date for the date_input
+    min_date = min_date.date()
+    max_date = max_date.date()
+    
+    # Display available date range
     st.sidebar.write(f"Available date range: {min_date} to {max_date}")
     
     # Initialize default dates if not set
@@ -181,7 +195,7 @@ def create_sidebar_filters(df):
     if st.session_state.filters['end_date'] is None:
         st.session_state.filters['end_date'] = max_date
     
-    # Date input widgets that update session state
+    # Date input widgets
     start_date = st.sidebar.date_input(
         "Start Date",
         value=st.session_state.filters['start_date'],
@@ -256,7 +270,7 @@ def create_sidebar_filters(df):
 def apply_filters(df):
     filtered = df.copy()
     
-    # Apply date range filter using session state
+    # Apply date range filter
     if st.session_state.filters['start_date'] and st.session_state.filters['end_date']:
         filtered = filtered[
             (filtered['Activity date'].dt.date >= st.session_state.filters['start_date']) &
